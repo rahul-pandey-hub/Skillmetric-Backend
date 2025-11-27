@@ -1,0 +1,117 @@
+================================================================================
+                    EMAIL SERVICE SETUP CHECKLIST
+================================================================================
+
+BEFORE YOU START:
+-----------------
+□ Read EMAIL_SETUP_SUMMARY.md in the root directory
+□ Read EMAIL_CONFIGURATION_GUIDE.md for detailed instructions
+
+STEP 1: INSTALL REDIS
+----------------------
+Choose ONE option:
+
+Option A - Docker (Recommended):
+□ docker run -d -p 6379:6379 --name redis redis:alpine
+
+Option B - Windows:
+□ choco install redis-64
+□ redis-server
+
+Option C - Mac:
+□ brew install redis
+□ brew services start redis
+
+□ Verify: redis-cli ping (should return PONG)
+
+STEP 2: CONFIGURE GMAIL
+------------------------
+□ Go to: https://myaccount.google.com/security
+□ Enable 2-Step Verification
+□ Go to: https://myaccount.google.com/apppasswords
+□ Select: Mail → Other (Custom) → "SkillMetric"
+□ Copy the 16-character app password (remove spaces)
+
+STEP 3: UPDATE .ENV FILE
+-------------------------
+□ Open: backend/.env
+□ Update SMTP_USER with your Gmail address
+□ Update SMTP_PASS with the app password (no spaces)
+□ Update SMTP_FROM with your Gmail address
+□ Verify REDIS_HOST=localhost
+□ Verify REDIS_PORT=6379
+□ Verify FRONTEND_URL is correct
+
+STEP 4: INSTALL & BUILD
+------------------------
+□ cd backend
+□ npm install (packages already installed)
+□ npm run build
+
+STEP 5: START SERVICES
+-----------------------
+□ Start Redis (if not already running)
+□ Start Backend: npm run start:dev
+□ Check logs for "Email service is ready to send emails"
+□ Check logs for successful Redis connection
+
+STEP 6: TEST THE FEATURE
+-------------------------
+□ Login to frontend as admin
+□ Navigate to an exam
+□ Create a test CSV with your email:
+  Name,Email
+  Test Student,your-test-email@gmail.com
+□ Click "Bulk Upload Students"
+□ Upload the CSV file
+□ Check backend logs for "Queued X welcome emails"
+□ Wait 10-30 seconds
+□ Check your email inbox for welcome email
+□ Verify the email contains:
+  - Student name
+  - Email address
+  - Temporary password
+  - Login link
+  - Instructions
+
+STEP 7: VERIFY SUCCESS
+----------------------
+□ Backend logs show: "Email sent successfully to..."
+□ Student received welcome email
+□ Student can login with temp password
+□ No errors in backend console
+□ Redis queue is processing (check logs)
+
+TROUBLESHOOTING:
+----------------
+If Redis connection fails:
+□ Verify Redis is running: redis-cli ping
+□ Check REDIS_HOST and REDIS_PORT in .env
+□ Try: docker ps (if using Docker)
+
+If Gmail auth fails:
+□ Verify 2-Step Verification is enabled
+□ Generate a NEW app password
+□ Copy WITHOUT spaces to .env
+□ Rebuild backend
+
+If emails not sending:
+□ Check backend logs for errors
+□ Verify SMTP credentials are correct
+□ Check if you hit Gmail daily limit (500/day)
+□ Try sending to different email address
+
+PRODUCTION DEPLOYMENT:
+----------------------
+□ Consider using SendGrid/AWS SES for higher volume
+□ Configure Redis persistence
+□ Set up monitoring for email queue
+□ Use environment variables from secure vault
+□ Test with small batch first
+□ Monitor daily sending limits
+
+================================================================================
+                            SETUP COMPLETE! ✓
+================================================================================
+
+Next: Rebuild backend, start Redis, test with your email!
