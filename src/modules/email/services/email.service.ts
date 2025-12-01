@@ -13,6 +13,14 @@ export interface StudentWelcomeEmailData {
   isNewUser?: boolean; // Flag to indicate if this is a new user
 }
 
+export interface OrgAdminWelcomeEmailData {
+  name: string;
+  email: string;
+  tempPassword: string;
+  organizationName: string;
+  organizationId: string;
+}
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -302,6 +310,200 @@ The SkillMetric Team
       return info;
     } catch (error) {
       this.logger.error(`Failed to send email to ${email}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send organization admin welcome email with credentials
+   */
+  async sendOrgAdminWelcomeEmail(data: OrgAdminWelcomeEmailData) {
+    const { name, email, tempPassword, organizationName, organizationId } = data;
+
+    const loginLink = `${this.configService.get('FRONTEND_URL', 'http://localhost:3000')}/login`;
+    const dashboardLink = `${this.configService.get('FRONTEND_URL', 'http://localhost:3000')}/admin/dashboard`;
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+    .header {
+      background-color: #1976d2;
+      color: white;
+      padding: 20px;
+      text-align: center;
+      border-radius: 5px 5px 0 0;
+    }
+    .content {
+      background-color: white;
+      padding: 30px;
+      border-radius: 0 0 5px 5px;
+    }
+    .credentials {
+      background-color: #f5f5f5;
+      padding: 15px;
+      border-left: 4px solid #1976d2;
+      margin: 20px 0;
+    }
+    .credentials strong {
+      color: #1976d2;
+    }
+    .button {
+      display: inline-block;
+      padding: 12px 30px;
+      background-color: #1976d2;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+      margin: 20px 0;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 20px;
+      color: #666;
+      font-size: 12px;
+    }
+    .warning {
+      background-color: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 10px;
+      margin: 15px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Welcome to SkillMetric</h1>
+    </div>
+    <div class="content">
+      <h2>Hello ${name}!</h2>
+      <p>You have been assigned as an Organization Administrator for <strong>${organizationName}</strong>.</p>
+
+      <p>Your account has been created with the following credentials:</p>
+
+      <div class="credentials">
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Temporary Password:</strong> ${tempPassword}</p>
+        <p><strong>Organization:</strong> ${organizationName}</p>
+      </div>
+
+      <div class="warning">
+        <p><strong>⚠️ Important:</strong> This is a temporary password. Please change it immediately after your first login for security purposes.</p>
+      </div>
+
+      <p>As an Organization Administrator, you have access to:</p>
+      <ul>
+        <li>Create and manage exams</li>
+        <li>Manage questions and question pools</li>
+        <li>Enroll and manage students</li>
+        <li>View analytics and reports</li>
+        <li>Configure organization settings</li>
+      </ul>
+
+      <a href="${loginLink}" class="button">
+        Login to Platform
+      </a>
+
+      <h3>Getting Started:</h3>
+      <ol>
+        <li>Click the login button above</li>
+        <li>Enter your email and temporary password</li>
+        <li>Change your password on first login</li>
+        <li>Explore the admin dashboard</li>
+        <li>Start creating exams and managing your organization</li>
+      </ol>
+
+      <p>If you have any questions or need assistance, please contact the SkillMetric support team.</p>
+
+      <p>Best regards,<br>The SkillMetric Team</p>
+    </div>
+    <div class="footer">
+      <p>This is an automated email. Please do not reply to this message.</p>
+      <p>&copy; ${new Date().getFullYear()} SkillMetric. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    const textContent = `
+Welcome to SkillMetric!
+
+Hello ${name},
+
+You have been assigned as an Organization Administrator for ${organizationName}.
+
+Your account credentials:
+Email: ${email}
+Temporary Password: ${tempPassword}
+Organization: ${organizationName}
+
+IMPORTANT: This is a temporary password. Please change it immediately after your first login.
+
+Login URL: ${loginLink}
+
+As an Organization Administrator, you have access to:
+- Create and manage exams
+- Manage questions and question pools
+- Enroll and manage students
+- View analytics and reports
+- Configure organization settings
+
+Getting Started:
+1. Visit the platform and login
+2. Enter your email and temporary password
+3. Change your password on first login
+4. Explore the admin dashboard
+5. Start creating exams and managing your organization
+
+If you need assistance, please contact the SkillMetric support team.
+
+Best regards,
+The SkillMetric Team
+    `;
+
+    const mailOptions = {
+      from: `"SkillMetric Platform" <${this.configService.get('SMTP_FROM', this.configService.get('SMTP_USER'))}>`,
+      to: email,
+      subject: `Welcome to SkillMetric - Organization Administrator Access`,
+      text: textContent,
+      html: htmlContent,
+    };
+
+    try {
+      const info = await this.transporter.sendMail(mailOptions);
+      this.logger.log(`Org admin welcome email sent successfully to ${email}: ${info.messageId}`);
+      return info;
+    } catch (error) {
+      this.logger.error(`Failed to send org admin welcome email to ${email}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Queue organization admin welcome email
+   */
+  async queueOrgAdminWelcomeEmail(data: OrgAdminWelcomeEmailData) {
+    try {
+      await this.emailQueue.add('org-admin-welcome', data, {
+        priority: 1, // High priority
+      });
+      this.logger.log(`Queued org admin welcome email for ${data.email}`);
+    } catch (error) {
+      this.logger.error(`Failed to queue org admin email for ${data.email}:`, error);
       throw error;
     }
   }

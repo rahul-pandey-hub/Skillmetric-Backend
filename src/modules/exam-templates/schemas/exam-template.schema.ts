@@ -71,15 +71,6 @@ class ProctoringSettings {
 
   @Prop({ type: Boolean, default: false })
   autoSubmitOnViolation: boolean;
-
-  @Prop({ type: Boolean, default: false })
-  faceDetection: boolean;
-
-  @Prop({ type: Boolean, default: false })
-  multipleFaceDetection: boolean;
-
-  @Prop({ type: Boolean, default: false })
-  mobileDetection: boolean;
 }
 
 @Schema()
@@ -95,9 +86,6 @@ class Settings {
 
   @Prop({ type: Boolean, default: true })
   allowReview: boolean;
-
-  @Prop({ type: Boolean, default: false })
-  showCorrectAnswers: boolean;
 
   @Prop({ type: Number, default: 1 })
   attemptsAllowed: number;

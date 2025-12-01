@@ -22,6 +22,8 @@ import { BulkOperationsModule } from './modules/bulk-operations/bulk-operations.
 import { CertificationsModule } from './modules/certifications/certifications.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { ShortlistingModule } from './modules/shortlisting/shortlisting.module';
+import { SystemConfigModule } from './modules/system-config/system-config.module';
+import { OrgAdminModule } from './modules/org-admin/org-admin.module';
 
 @Module({
   imports: [
@@ -70,6 +72,8 @@ import { ShortlistingModule } from './modules/shortlisting/shortlisting.module';
     CertificationsModule,
     AnalyticsModule,
     ShortlistingModule,
+    SystemConfigModule,
+    OrgAdminModule,
     StudentsModule,
     NotificationsModule,
     RabbitMQModule,

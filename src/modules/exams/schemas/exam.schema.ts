@@ -88,13 +88,6 @@ class Grading {
 
   @Prop()
   negativeMarkValue?: number;
-
-  @Prop({
-    type: String,
-    enum: Object.values(GradingScheme),
-    default: GradingScheme.PERCENTAGE,
-  })
-  gradingScheme: GradingScheme;
 }
 
 @Schema()
@@ -128,15 +121,6 @@ class ProctoringSettings {
 
   @Prop({ type: Boolean, default: false })
   autoSubmitOnViolation: boolean;
-
-  @Prop({ type: Boolean, default: false })
-  faceDetection: boolean;
-
-  @Prop({ type: Boolean, default: false })
-  multipleFaceDetection: boolean;
-
-  @Prop({ type: Boolean, default: false })
-  mobileDetection: boolean;
 }
 
 @Schema()
@@ -153,26 +137,8 @@ class Settings {
   @Prop({ type: Boolean, default: true })
   allowReview: boolean;
 
-  @Prop({ type: Boolean, default: false })
-  showCorrectAnswers: boolean;
-
   @Prop({ type: Number, default: 1 })
   attemptsAllowed: number;
-
-  @Prop({ type: Boolean, default: true })
-  allowSkip: boolean;
-
-  @Prop({ type: Boolean, default: true })
-  allowBackNavigation: boolean;
-
-  @Prop({ type: Boolean, default: true })
-  showTimer: boolean;
-
-  @Prop({ type: Boolean, default: false })
-  allowPauseResume: boolean;
-
-  @Prop({ type: Boolean, default: true })
-  saveProgressAutomatically: boolean;
 }
 
 @Schema()

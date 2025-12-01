@@ -78,18 +78,6 @@ class ProctoringSettingsDto {
   @IsBoolean()
   @IsOptional()
   autoSubmitOnViolation?: boolean;
-
-  @IsBoolean()
-  @IsOptional()
-  faceDetection?: boolean;
-
-  @IsBoolean()
-  @IsOptional()
-  multipleFaceDetection?: boolean;
-
-  @IsBoolean()
-  @IsOptional()
-  mobileDetection?: boolean;
 }
 
 class SettingsDto {
@@ -108,10 +96,6 @@ class SettingsDto {
   @IsBoolean()
   @IsOptional()
   allowReview?: boolean;
-
-  @IsBoolean()
-  @IsOptional()
-  showCorrectAnswers?: boolean;
 
   @IsNumber()
   @IsOptional()

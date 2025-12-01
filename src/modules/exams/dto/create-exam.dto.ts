@@ -73,6 +73,12 @@ class GradingDto {
   @Min(0)
   passingMarks: number;
 
+  @ApiPropertyOptional({ example: 40 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  passingPercentage?: number;
+
   @ApiProperty({ example: false })
   @IsBoolean()
   negativeMarking: boolean;

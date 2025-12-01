@@ -1,7 +1,11 @@
 import { Processor, Process } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
-import { EmailService, StudentWelcomeEmailData } from '../services/email.service';
+import {
+  EmailService,
+  StudentWelcomeEmailData,
+  OrgAdminWelcomeEmailData
+} from '../services/email.service';
 
 @Processor('email')
 export class EmailProcessor {
@@ -24,6 +28,27 @@ export class EmailProcessor {
     } catch (error) {
       this.logger.error(
         `Failed to send email to ${job.data.email} (Job ${job.id}):`,
+        error,
+      );
+      throw error; // This will trigger retry logic
+    }
+  }
+
+  @Process('org-admin-welcome')
+  async handleOrgAdminWelcomeEmail(job: Job<OrgAdminWelcomeEmailData>) {
+    this.logger.log(
+      `Processing org admin welcome email job ${job.id} for ${job.data.email}`,
+    );
+
+    try {
+      await this.emailService.sendOrgAdminWelcomeEmail(job.data);
+      this.logger.log(
+        `Successfully sent org admin welcome email to ${job.data.email} (Job ${job.id})`,
+      );
+      return { success: true, email: job.data.email };
+    } catch (error) {
+      this.logger.error(
+        `Failed to send org admin email to ${job.data.email} (Job ${job.id}):`,
         error,
       );
       throw error; // This will trigger retry logic

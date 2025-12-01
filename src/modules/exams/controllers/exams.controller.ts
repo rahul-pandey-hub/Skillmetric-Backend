@@ -4,6 +4,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../common/guards/roles.guard';
+import { OrganizationGuard } from '../../../common/guards/organization.guard';
+import { Roles } from '../../../common/decorators/roles.decorator';
+import { UserRole } from '../../users/schemas/user.schema';
 import { CreateExamCommand } from '../commands/impl/create-exam.command';
 import { AddQuestionsToExamCommand } from '../commands/impl/add-questions-to-exam.command';
 import { RemoveQuestionsFromExamCommand } from '../commands/impl/remove-questions-from-exam.command';
@@ -16,6 +20,7 @@ import { Exam } from '../schemas/exam.schema';
 
 @ApiTags('exams')
 @Controller('exams')
+@UseGuards(JwtAuthGuard, RolesGuard, OrganizationGuard)
 export class ExamsController {
   constructor(
     private readonly commandBus: CommandBus,
@@ -23,23 +28,40 @@ export class ExamsController {
   ) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN, UserRole.INSTRUCTOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new exam' })
+  @ApiResponse({ status: 201, description: 'Exam created successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
   async createExam(@Body() createExamDto: CreateExamDto, @Request() req) {
+    // Add organizationId to the exam data
+    const examDataWithOrg = {
+      ...createExamDto,
+      organizationId: req.user.organizationId,
+    };
+
     return this.commandBus.execute(
-      new CreateExamCommand(createExamDto, req.user.id),
+      new CreateExamCommand(examDataWithOrg, req.user.id),
     );
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN, UserRole.INSTRUCTOR)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get all exams created by the admin' })
+  @ApiOperation({ summary: 'Get all exams within your organization' })
   @ApiResponse({ status: 200, description: 'Exams retrieved successfully' })
   async getAllExams(@Request() req) {
+    // Filter by organizationId instead of just createdBy
+    const filter: any = { organizationId: req.user.organizationId };
+
+    // Recruiters/Instructors can only see their own exams
+    // Org Admins can see all exams in their organization
+    if (req.user.role === UserRole.RECRUITER || req.user.role === UserRole.INSTRUCTOR) {
+      filter.createdBy = req.user.id;
+    }
+
     const exams = await this.examModel
-      .find({ createdBy: req.user.id })
+      .find(filter)
       .populate('questions', 'questionText type difficulty marks')
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 })
@@ -73,7 +95,7 @@ export class ExamsController {
   }
 
   @Post(':id/questions')
-  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN, UserRole.INSTRUCTOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add questions to an exam' })
   @ApiParam({ name: 'id', description: 'Exam ID' })
@@ -91,7 +113,7 @@ export class ExamsController {
   }
 
   @Delete(':id/questions')
-  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN, UserRole.INSTRUCTOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Remove questions from an exam' })
   @ApiParam({ name: 'id', description: 'Exam ID' })
@@ -109,7 +131,7 @@ export class ExamsController {
   }
 
   @Post(':id/enroll-students')
-  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Bulk enroll students to an exam' })
   @ApiParam({ name: 'id', description: 'Exam ID' })

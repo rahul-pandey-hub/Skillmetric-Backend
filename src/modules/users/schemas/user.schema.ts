@@ -258,6 +258,31 @@ export class User extends Document {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
+// Pre-save hook to validate organizationId requirement
+UserSchema.pre('save', function (next) {
+  const user = this as User;
+
+  // SUPER_ADMIN doesn't need organizationId
+  if (user.role === UserRole.SUPER_ADMIN) {
+    user.organizationId = undefined; // Ensure SUPER_ADMIN has no organizationId
+    return next();
+  }
+
+  // All other roles MUST have organizationId (except STUDENT during enrollment)
+  if (
+    user.role !== UserRole.STUDENT &&
+    !user.organizationId
+  ) {
+    return next(
+      new Error(
+        `Users with role ${user.role} must belong to an organization. Please provide organizationId.`,
+      ),
+    );
+  }
+
+  next();
+});
+
 // Indexes
 UserSchema.index({ email: 1 });
 UserSchema.index({ studentId: 1 });
