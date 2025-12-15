@@ -10,6 +10,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  NotFoundException,
 } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
 import { InjectModel } from '@nestjs/mongoose';
@@ -112,7 +113,7 @@ export class SuperAdminController {
       .exec();
 
     if (!organization) {
-      throw new Error('Organization not found');
+      throw new NotFoundException(`Organization with ID ${id} not found`);
     }
 
     return organization;
@@ -136,7 +137,7 @@ export class SuperAdminController {
   async delete(@Param('id') id: string) {
     const organization = await this.organizationModel.findByIdAndDelete(id);
     if (!organization) {
-      throw new Error('Organization not found');
+      throw new NotFoundException(`Organization with ID ${id} not found`);
     }
     return;
   }
@@ -186,7 +187,7 @@ export class SuperAdminController {
   async getUsageStats(@Param('id') id: string) {
     const organization = await this.organizationModel.findById(id).exec();
     if (!organization) {
-      throw new Error('Organization not found');
+      throw new NotFoundException(`Organization with ID ${id} not found`);
     }
 
     return {

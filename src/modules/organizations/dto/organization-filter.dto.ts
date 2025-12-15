@@ -49,7 +49,7 @@ export class OrganizationFilterDto {
   @IsNumber()
   @Min(1)
   @IsOptional()
-  page?: number = 1;
+  page?: number;
 
   @ApiPropertyOptional({
     description: 'Number of items per page',
@@ -60,5 +60,5 @@ export class OrganizationFilterDto {
   @IsNumber()
   @Min(1)
   @IsOptional()
-  limit?: number = 10;
+  limit?: number;
 }

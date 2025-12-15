@@ -65,28 +65,24 @@ export class AnalyticsService {
     ]);
 
     return {
-      overview: {
-        totalOrganizations,
-        activeOrganizations,
-        suspendedOrganizations: totalOrganizations - activeOrganizations,
-        totalUsers,
-        totalExams,
-        totalAssessments,
-      },
-      breakdowns: {
-        byType: organizationsByType.reduce((acc, item) => {
-          acc[item._id] = item.count;
-          return acc;
-        }, {}),
-        byPlan: organizationsByPlan.reduce((acc, item) => {
-          acc[item._id] = item.count;
-          return acc;
-        }, {}),
-        byStatus: organizationsByStatus.reduce((acc, item) => {
-          acc[item._id] = item.count;
-          return acc;
-        }, {}),
-      },
+      totalOrganizations,
+      activeOrganizations,
+      suspendedOrganizations: totalOrganizations - activeOrganizations,
+      totalUsers,
+      totalExams,
+      totalAssessments,
+      organizationsByType: organizationsByType.reduce((acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {}),
+      organizationsByPlan: organizationsByPlan.reduce((acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {}),
+      organizationsByStatus: organizationsByStatus.reduce((acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {}),
     };
   }
 
@@ -97,31 +93,32 @@ export class AnalyticsService {
     const [byUsers, byExams, byAssessments, byCreditsUsed] = await Promise.all([
       this.organizationModel
         .find()
-        .select('name stats.totalUsers')
+        .select('name stats subscription.plan type status')
         .sort({ 'stats.totalUsers': -1 })
         .limit(limit)
         .lean(),
       this.organizationModel
         .find()
-        .select('name stats.totalExams')
+        .select('name stats subscription.plan type status')
         .sort({ 'stats.totalExams': -1 })
         .limit(limit)
         .lean(),
       this.organizationModel
         .find()
-        .select('name stats.totalAssessments')
+        .select('name stats subscription.plan type status')
         .sort({ 'stats.totalAssessments': -1 })
         .limit(limit)
         .lean(),
       this.organizationModel
         .find()
-        .select('name stats.creditsUsed subscription.credits')
+        .select('name stats subscription type status')
         .sort({ 'stats.creditsUsed': -1 })
         .limit(limit)
         .lean(),
     ]);
 
     return {
+      topOrganizations: byUsers,
       byUsers,
       byExams,
       byAssessments,
@@ -189,14 +186,24 @@ export class AnalyticsService {
       ENTERPRISE: 999,
     };
 
-    const estimatedMonthlyRevenue = subscriptionBreakdown.reduce((total, plan) => {
+    const totalMonthlyRevenue = subscriptionBreakdown.reduce((total, plan) => {
       const price = planPricing[plan._id] || 0;
       return total + price * plan.count;
     }, 0);
 
+    const totalYearlyRevenue = totalMonthlyRevenue * 12;
+
+    // Count active subscriptions
+    const activeSubscriptions = await this.organizationModel.countDocuments({
+      status: 'ACTIVE',
+      'subscription.plan': { $ne: 'FREE' },
+    });
+
     return {
       subscriptionBreakdown,
-      estimatedMonthlyRevenue,
+      totalMonthlyRevenue,
+      totalYearlyRevenue,
+      activeSubscriptions,
       currency: 'USD',
     };
   }

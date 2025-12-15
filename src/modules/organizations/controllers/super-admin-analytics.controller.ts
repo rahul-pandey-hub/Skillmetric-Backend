@@ -31,7 +31,10 @@ export class SuperAdminAnalyticsController {
     description: 'Platform statistics retrieved successfully',
   })
   async getPlatformStats() {
-    return this.analyticsService.getPlatformStatistics();
+    console.log('🔍 [BACKEND] getPlatformStats() called');
+    const stats = await this.analyticsService.getPlatformStatistics();
+    console.log('✅ [BACKEND] Platform stats fetched:', JSON.stringify(stats, null, 2));
+    return stats;
   }
 
   @Get('top-organizations')

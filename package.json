@@ -20,7 +20,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "create:admin": "ts-node -r tsconfig-paths/register scripts/create-admin.ts",
     "create:recruiter": "ts-node -r tsconfig-paths/register scripts/create-recruiter.ts",
-    "seed:super-admin": "ts-node -r tsconfig-paths/register src/scripts/seed-super-admin.ts"
+    "seed:super-admin": "ts-node -r tsconfig-paths/register src/scripts/seed-super-admin.ts",
+    "seed:test-data": "ts-node -r tsconfig-paths/register src/scripts/seed-test-data.ts"
   },
   "dependencies": {
     "@nestjs/bull": "^11.0.4",
