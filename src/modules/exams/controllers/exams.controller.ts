@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Put, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Body, Param, UseGuards, Request, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -128,6 +128,35 @@ export class ExamsController {
     return this.commandBus.execute(
       new RemoveQuestionsFromExamCommand(examId, removeQuestionsDto.questionIds, req.user.id),
     );
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN, UserRole.INSTRUCTOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete an exam' })
+  @ApiParam({ name: 'id', description: 'Exam ID' })
+  @ApiResponse({ status: 200, description: 'Exam deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Exam not found' })
+  @ApiResponse({ status: 403, description: 'Forbidden - not the creator' })
+  async deleteExam(@Param('id') examId: string, @Request() req) {
+    const exam = await this.examModel.findById(examId).exec();
+
+    if (!exam) {
+      throw new NotFoundException('Exam not found');
+    }
+
+    // Check if user is the creator
+    if (exam.createdBy.toString() !== req.user.id) {
+      throw new ForbiddenException('You are not authorized to delete this exam');
+    }
+
+    // Delete the exam
+    await this.examModel.findByIdAndDelete(examId).exec();
+
+    return {
+      message: 'Exam deleted successfully',
+      examId,
+    };
   }
 
   @Post(':id/enroll-students')

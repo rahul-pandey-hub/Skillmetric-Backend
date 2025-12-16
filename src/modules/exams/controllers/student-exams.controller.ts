@@ -6,6 +6,8 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { Exam, ExamStatus } from '../schemas/exam.schema';
 import { Question } from '../../questions/schemas/question.schema';
 import { ExamSession, SessionStatus } from '../../proctoring/schemas/exam-session.schema';
+import { Result, ResultStatus } from '../../results/schemas/result.schema';
+import { User } from '../../users/schemas/user.schema';
 
 interface ShuffledQuestion {
   _id: string;
@@ -23,6 +25,8 @@ export class StudentExamsController {
     @InjectModel(Exam.name) private examModel: Model<Exam>,
     @InjectModel(Question.name) private questionModel: Model<Question>,
     @InjectModel(ExamSession.name) private examSessionModel: Model<ExamSession>,
+    @InjectModel(Result.name) private resultModel: Model<Result>,
+    @InjectModel(User.name) private userModel: Model<User>,
   ) {}
 
   @Get('debug/enrollment')
@@ -239,12 +243,42 @@ export class StudentExamsController {
 
     const exam = accessCheck.exam;
 
+    // Check if exam has questions
+    if (!exam.questions || exam.questions.length === 0) {
+      throw new BadRequestException('This exam has no questions assigned. Please contact your administrator.');
+    }
+
+    // Filter valid ObjectIds and log invalid ones
+    const validQuestionIds = exam.questions.filter((id: any) => {
+      try {
+        if (typeof id === 'string' && id.match(/^[0-9a-fA-F]{24}$/)) {
+          return true;
+        }
+        if (id && id._id && typeof id._id === 'object') {
+          return true;
+        }
+        console.error('Invalid question ID in exam:', id);
+        return false;
+      } catch (err) {
+        console.error('Error validating question ID:', id, err);
+        return false;
+      }
+    });
+
+    if (validQuestionIds.length === 0) {
+      throw new BadRequestException('This exam has invalid question references. Please contact your administrator to add valid questions.');
+    }
+
     // Load questions with full details
     const questions = await this.questionModel
       .find({
-        _id: { $in: exam.questions },
+        _id: { $in: validQuestionIds },
       })
       .exec();
+
+    if (questions.length === 0) {
+      throw new BadRequestException('No questions found for this exam. Please contact your administrator.');
+    }
 
     // Shuffle questions if required
     let processedQuestions = questions.map((q) => q.toObject());
@@ -433,6 +467,166 @@ export class StudentExamsController {
     return {
       success: true,
       message: 'Answer saved successfully',
+    };
+  }
+
+  @Get('results')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all exam results for the student' })
+  @ApiResponse({ status: 200, description: 'Results retrieved successfully' })
+  async getAllResults(@Request() req) {
+    const studentId = req.user.id;
+
+    const results = await this.resultModel
+      .find({ student: new Types.ObjectId(studentId) })
+      .populate('exam', 'title code description grading.totalMarks grading.passingMarks schedule')
+      .sort({ createdAt: -1 })
+      .exec();
+
+    // Transform results to include exam details
+    const transformedResults = results.map(result => ({
+      _id: result._id,
+      exam: {
+        _id: (result.exam as any)._id,
+        title: (result.exam as any).title,
+        code: (result.exam as any).code,
+        description: (result.exam as any).description,
+        totalMarks: (result.exam as any).grading?.totalMarks,
+        passingMarks: (result.exam as any).grading?.passingMarks,
+        schedule: (result.exam as any).schedule,
+      },
+      status: result.status,
+      score: result.score,
+      analysis: result.analysis,
+      rank: result.rank,
+      percentile: result.percentile,
+      proctoringReport: result.proctoringReport,
+      submittedAt: result.submittedAt,
+      publishedAt: result.publishedAt,
+      createdAt: (result as any).createdAt,
+    }));
+
+    return {
+      data: transformedResults,
+      total: transformedResults.length,
+    };
+  }
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get student profile' })
+  @ApiResponse({ status: 200, description: 'Profile retrieved successfully' })
+  async getProfile(@Request() req) {
+    const studentId = req.user.id;
+
+    const user = await this.userModel
+      .findById(studentId)
+      .select('-password')
+      .exec();
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      profileDetails: user.profile,
+      skillProfile: user.skillProfile,
+      certifications: user.certifications,
+      preferences: user.preferences,
+      createdAt: (user as any).createdAt,
+      updatedAt: (user as any).updatedAt,
+    };
+  }
+
+  @Get(':examId/result')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get detailed result for a specific exam' })
+  @ApiParam({ name: 'examId', description: 'Exam ID' })
+  @ApiResponse({ status: 200, description: 'Result retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Result not found' })
+  async getExamResult(@Param('examId') examId: string, @Request() req) {
+    const studentId = req.user.id;
+
+    const result = await this.resultModel
+      .findOne({
+        exam: new Types.ObjectId(examId),
+        student: new Types.ObjectId(studentId)
+      })
+      .populate('exam', 'title code description duration grading settings schedule')
+      .exec();
+
+    if (!result) {
+      throw new NotFoundException('Result not found for this exam');
+    }
+
+    // Get the exam session for additional details
+    const session = await this.examSessionModel
+      .findOne({
+        examId: new Types.ObjectId(examId),
+        studentId: new Types.ObjectId(studentId)
+      })
+      .sort({ createdAt: -1 })
+      .exec();
+
+    // Get all results for this exam to calculate ranking
+    const allResults = await this.resultModel
+      .find({
+        exam: new Types.ObjectId(examId),
+        status: { $in: [ResultStatus.GRADED, ResultStatus.PUBLISHED] }
+      })
+      .sort({ 'score.obtained': -1 })
+      .exec();
+
+    const totalStudents = allResults.length;
+    const studentRank = allResults.findIndex(r => r.student.toString() === studentId) + 1;
+    const percentile = totalStudents > 1 ? ((totalStudents - studentRank + 1) / totalStudents) * 100 : 100;
+
+    // Check if student is in top percentage for shortlisting
+    const topPercentage = 15; // Top 15%
+    const isShortlisted = (percentile >= (100 - topPercentage));
+
+    return {
+      _id: result._id,
+      exam: {
+        _id: (result.exam as any)._id,
+        title: (result.exam as any).title,
+        code: (result.exam as any).code,
+        description: (result.exam as any).description,
+        duration: (result.exam as any).duration,
+        totalMarks: (result.exam as any).grading?.totalMarks,
+        passingMarks: (result.exam as any).grading?.passingMarks,
+        settings: (result.exam as any).settings,
+        schedule: (result.exam as any).schedule,
+      },
+      status: result.status,
+      score: result.score,
+      analysis: result.analysis,
+      questionResults: result.questionResults,
+      proctoringReport: result.proctoringReport,
+      ranking: {
+        rank: studentRank,
+        outOf: totalStudents,
+        percentile: Math.round(percentile * 100) / 100,
+        isShortlisted,
+      },
+      session: session ? {
+        startTime: session.startTime,
+        endTime: session.endTime,
+        submittedAt: session.submittedAt,
+        warningCount: session.warningCount,
+        violationsCount: session.violations?.length || 0,
+      } : null,
+      submittedAt: result.submittedAt,
+      publishedAt: result.publishedAt,
+      evaluatedAt: result.evaluatedAt,
+      createdAt: (result as any).createdAt,
     };
   }
 
