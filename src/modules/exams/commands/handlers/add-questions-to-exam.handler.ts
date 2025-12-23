@@ -53,6 +53,18 @@ export class AddQuestionsToExamHandler implements ICommandHandler<AddQuestionsTo
     }
 
     exam.questions.push(...newQuestionIds.map(id => new Types.ObjectId(id)));
+
+    // Auto-calculate total marks from all questions
+    const allQuestions = await this.questionModel.find({
+      _id: { $in: exam.questions }
+    });
+
+    exam.grading.totalMarks = allQuestions.reduce(
+      (sum, q) => sum + (q.marks || 0),
+      0
+    );
+    exam.totalQuestions = allQuestions.length;
+
     await exam.save();
 
     // Populate questions for response
@@ -60,6 +72,8 @@ export class AddQuestionsToExamHandler implements ICommandHandler<AddQuestionsTo
 
     return {
       message: `${newQuestionIds.length} question(s) added successfully`,
+      totalQuestions: exam.totalQuestions,
+      totalMarks: exam.grading.totalMarks,
       exam,
     };
   }

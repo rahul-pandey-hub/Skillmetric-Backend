@@ -121,8 +121,9 @@ export class CreateQuestionDto {
   @Type(() => OptionDto)
   options?: OptionDto[];
 
-  @ApiProperty()
-  correctAnswer: any;
+  @ApiPropertyOptional()
+  @IsOptional()
+  correctAnswer?: any;
 
   @ApiPropertyOptional({ type: CodingDetailsDto })
   @IsOptional()

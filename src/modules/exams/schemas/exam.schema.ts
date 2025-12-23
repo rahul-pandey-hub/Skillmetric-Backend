@@ -70,6 +70,9 @@ class Schedule {
 
   @Prop({ type: Number, default: 0 })
   lateSubmissionPenalty: number;
+
+  @Prop({ type: Date })
+  lateSubmissionDeadline?: Date; // Extended deadline for late submissions
 }
 
 @Schema()

@@ -20,17 +20,24 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    const user = await this.userModel.findById(payload.sub);
+    const user = await this.userModel.findById(payload.sub || payload.userId);
     if (!user || !user.isActive) {
       throw new UnauthorizedException();
     }
 
+    // For multi-org support: use first organization as default
+    const defaultOrgId = user.organizationIds && user.organizationIds.length > 0
+      ? user.organizationIds[0]
+      : null;
+
     return {
+      userId: user._id.toString(),
       id: user._id.toString(),
       email: user.email,
       role: user.role,
       studentId: user.studentId,
-      organizationId: user.organizationId?.toString() || null,
+      organizationId: defaultOrgId?.toString() || null, // Default org for backward compatibility
+      organizationIds: user.organizationIds.map(id => id.toString()), // All orgs
     };
   }
 }

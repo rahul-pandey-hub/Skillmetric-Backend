@@ -272,6 +272,44 @@ export class Result extends Document {
   @Prop()
   feedback?: string;
 
+  // Late submission tracking
+  @Prop({ type: Object })
+  lateSubmission?: {
+    isLate: boolean;
+    lateByMinutes: number;
+    penaltyApplied: number;
+    originalScore: number;
+  };
+
+  // Email tracking
+  @Prop({
+    type: {
+      enrollmentSent: { type: Boolean, default: false },
+      enrollmentSentAt: Date,
+      enrollmentError: String,
+      resultSent: { type: Boolean, default: false },
+      resultSentAt: Date,
+      resultError: String,
+      remindersSent: { type: Number, default: 0 },
+      lastReminderAt: Date,
+    },
+    default: () => ({
+      enrollmentSent: false,
+      resultSent: false,
+      remindersSent: 0,
+    }),
+  })
+  emailTracking?: {
+    enrollmentSent: boolean;
+    enrollmentSentAt?: Date;
+    enrollmentError?: string;
+    resultSent: boolean;
+    resultSentAt?: Date;
+    resultError?: string;
+    remindersSent: number;
+    lastReminderAt?: Date;
+  };
+
   // Legacy field for backward compatibility
   @Prop()
   rank?: number;

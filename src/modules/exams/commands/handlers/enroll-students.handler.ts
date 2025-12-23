@@ -155,6 +155,68 @@ export class EnrollStudentsHandler
       }
     }
 
+    // Schedule automated exam reminders (24h and 1h before exam)
+    if (exam.schedule?.startDate && results.enrolled.length > 0) {
+      try {
+        const startDate = new Date(exam.schedule.startDate);
+        const now = new Date();
+
+        // Only schedule reminders if exam is in the future
+        if (startDate > now) {
+          // Get all enrolled students for reminders
+          const enrolledStudentIds = results.enrolled.map((s) => s.userId);
+          const enrolledStudents = await this.userModel.find({
+            _id: { $in: enrolledStudentIds },
+          });
+
+          // Schedule 24-hour reminders
+          const delay24h = startDate.getTime() - now.getTime() - 24 * 60 * 60 * 1000;
+          if (delay24h > 0) {
+            const reminders24h = enrolledStudents.map((student) => ({
+              studentId: student._id.toString(),
+              studentName: student.name,
+              studentEmail: student.email,
+              examId: exam._id.toString(),
+              examTitle: exam.title,
+              examDescription: exam.description,
+              startDate: exam.schedule.startDate,
+              duration: exam.duration,
+              reminderType: '24h' as const,
+            }));
+
+            await this.emailService.queueBulkExamReminders(reminders24h, delay24h);
+            this.logger.log(
+              `Scheduled ${reminders24h.length} 24-hour reminder emails for exam ${exam.title}`,
+            );
+          }
+
+          // Schedule 1-hour reminders
+          const delay1h = startDate.getTime() - now.getTime() - 60 * 60 * 1000;
+          if (delay1h > 0) {
+            const reminders1h = enrolledStudents.map((student) => ({
+              studentId: student._id.toString(),
+              studentName: student.name,
+              studentEmail: student.email,
+              examId: exam._id.toString(),
+              examTitle: exam.title,
+              examDescription: exam.description,
+              startDate: exam.schedule.startDate,
+              duration: exam.duration,
+              reminderType: '1h' as const,
+            }));
+
+            await this.emailService.queueBulkExamReminders(reminders1h, delay1h);
+            this.logger.log(
+              `Scheduled ${reminders1h.length} 1-hour reminder emails for exam ${exam.title}`,
+            );
+          }
+        }
+      } catch (error) {
+        this.logger.error('Failed to schedule exam reminders:', error);
+        // Don't fail the enrollment if reminder scheduling fails
+      }
+    }
+
     return {
       message: 'Student enrollment processed',
       summary: {

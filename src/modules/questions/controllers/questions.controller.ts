@@ -49,7 +49,11 @@ export class QuestionsController {
     @Request() req,
   ) {
     return this.commandBus.execute(
-      new CreateQuestionCommand(createQuestionDto, req.user.id),
+      new CreateQuestionCommand(
+        createQuestionDto,
+        req.user.id,
+        req.user.organizationId,
+      ),
     );
   }
 

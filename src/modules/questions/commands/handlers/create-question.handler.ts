@@ -14,7 +14,7 @@ export class CreateQuestionHandler
   ) {}
 
   async execute(command: CreateQuestionCommand) {
-    const { createQuestionDto, userId } = command;
+    const { createQuestionDto, userId, organizationId } = command;
 
     // Type-specific validation
     switch (createQuestionDto.type) {
@@ -56,6 +56,7 @@ export class CreateQuestionHandler
     const question = new this.questionModel({
       ...createQuestionDto,
       createdBy: userId,
+      organizationId: organizationId || null,
     });
 
     await question.save();

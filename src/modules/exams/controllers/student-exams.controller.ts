@@ -171,13 +171,31 @@ export class StudentExamsController {
       };
     }
 
-    if (now > endDate && !exam.schedule.lateSubmissionAllowed) {
-      return {
-        canStart: false,
-        reason: 'Exam has ended',
-        endDate: exam.schedule.endDate,
-        exam: exam.toObject(),
-      };
+    // Check if exam has ended
+    if (now > endDate) {
+      // If late submission is not allowed, block access
+      if (!exam.schedule.lateSubmissionAllowed) {
+        return {
+          canStart: false,
+          reason: 'Exam has ended',
+          endDate: exam.schedule.endDate,
+          exam: exam.toObject(),
+        };
+      }
+
+      // If late submission is allowed, check the deadline
+      if (exam.schedule.lateSubmissionDeadline) {
+        const lateDeadline = new Date(exam.schedule.lateSubmissionDeadline);
+        if (now > lateDeadline) {
+          return {
+            canStart: false,
+            reason: 'Late submission period has ended',
+            endDate: exam.schedule.endDate,
+            lateDeadline: exam.schedule.lateSubmissionDeadline,
+            exam: exam.toObject(),
+          };
+        }
+      }
     }
 
     // Check previous attempts

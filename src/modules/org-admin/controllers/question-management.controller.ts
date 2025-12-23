@@ -37,7 +37,7 @@ export class QuestionManagementController {
   @ApiResponse({ status: 201, description: 'Question created successfully' })
   async createQuestion(@Body() dto: CreateQuestionDto, @Request() req) {
     const organizationId = req.user.organizationId;
-    const userId = req.user.userId;
+    const userId = req.user.id;
     return this.questionManagementService.createQuestion(dto, organizationId, userId);
   }
 
@@ -46,7 +46,7 @@ export class QuestionManagementController {
   @ApiResponse({ status: 201, description: 'Bulk creation completed' })
   async bulkCreateQuestions(@Body() dto: BulkCreateQuestionsDto, @Request() req) {
     const organizationId = req.user.organizationId;
-    const userId = req.user.userId;
+    const userId = req.user.id;
     return this.questionManagementService.bulkCreateQuestions(dto.questions, organizationId, userId);
   }
 

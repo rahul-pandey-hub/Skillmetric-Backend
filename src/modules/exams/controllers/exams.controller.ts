@@ -1,7 +1,7 @@
-import { Controller, Post, Get, Put, Delete, Body, Param, UseGuards, Request, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Body, Param, UseGuards, Request, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
@@ -81,6 +81,11 @@ export class ExamsController {
   @ApiResponse({ status: 200, description: 'Exam retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Exam not found' })
   async getExamById(@Param('id') id: string) {
+    // Validate if the id is a valid MongoDB ObjectId
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid exam ID format');
+    }
+
     const exam = await this.examModel
       .findById(id)
       .populate('questions')
@@ -88,7 +93,7 @@ export class ExamsController {
       .exec();
 
     if (!exam) {
-      throw new Error('Exam not found');
+      throw new NotFoundException('Exam not found');
     }
 
     return exam;
@@ -107,6 +112,10 @@ export class ExamsController {
     @Body() addQuestionsDto: AddQuestionsDto,
     @Request() req,
   ) {
+    if (!Types.ObjectId.isValid(examId)) {
+      throw new BadRequestException('Invalid exam ID format');
+    }
+
     return this.commandBus.execute(
       new AddQuestionsToExamCommand(examId, addQuestionsDto.questionIds, req.user.id),
     );
@@ -125,6 +134,10 @@ export class ExamsController {
     @Body() removeQuestionsDto: RemoveQuestionsDto,
     @Request() req,
   ) {
+    if (!Types.ObjectId.isValid(examId)) {
+      throw new BadRequestException('Invalid exam ID format');
+    }
+
     return this.commandBus.execute(
       new RemoveQuestionsFromExamCommand(examId, removeQuestionsDto.questionIds, req.user.id),
     );
@@ -139,6 +152,10 @@ export class ExamsController {
   @ApiResponse({ status: 404, description: 'Exam not found' })
   @ApiResponse({ status: 403, description: 'Forbidden - not the creator' })
   async deleteExam(@Param('id') examId: string, @Request() req) {
+    if (!Types.ObjectId.isValid(examId)) {
+      throw new BadRequestException('Invalid exam ID format');
+    }
+
     const exam = await this.examModel.findById(examId).exec();
 
     if (!exam) {
@@ -193,6 +210,10 @@ export class ExamsController {
     @Body() enrollStudentsDto: EnrollStudentsDto,
     @Request() req,
   ) {
+    if (!Types.ObjectId.isValid(examId)) {
+      throw new BadRequestException('Invalid exam ID format');
+    }
+
     return this.commandBus.execute(
       new EnrollStudentsCommand(examId, enrollStudentsDto, req.user.id),
     );

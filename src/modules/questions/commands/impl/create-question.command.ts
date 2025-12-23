@@ -4,5 +4,6 @@ export class CreateQuestionCommand {
   constructor(
     public readonly createQuestionDto: CreateQuestionDto,
     public readonly userId: string,
+    public readonly organizationId?: string,
   ) {}
 }

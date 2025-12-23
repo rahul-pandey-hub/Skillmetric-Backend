@@ -24,6 +24,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { ShortlistingModule } from './modules/shortlisting/shortlisting.module';
 import { SystemConfigModule } from './modules/system-config/system-config.module';
 import { OrgAdminModule } from './modules/org-admin/org-admin.module';
+import { MonitoringModule } from './modules/monitoring/monitoring.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { OrgAdminModule } from './modules/org-admin/org-admin.module';
     ShortlistingModule,
     SystemConfigModule,
     OrgAdminModule,
+    MonitoringModule,
     StudentsModule,
     NotificationsModule,
     RabbitMQModule,

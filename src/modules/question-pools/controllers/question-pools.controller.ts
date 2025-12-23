@@ -24,6 +24,7 @@ import {
   QuestionPool,
   QuestionPoolDocument,
 } from '../schemas/question-pool.schema';
+import { PoolSelectionService } from '../services/pool-selection.service';
 
 @Controller('question-pools')
 @UseGuards(JwtAuthGuard)
@@ -32,6 +33,7 @@ export class QuestionPoolsController {
     private readonly commandBus: CommandBus,
     @InjectModel(QuestionPool.name)
     private questionPoolModel: Model<QuestionPoolDocument>,
+    private readonly poolSelectionService: PoolSelectionService,
   ) {}
 
   @Post()
@@ -229,6 +231,75 @@ export class QuestionPoolsController {
     return {
       statusCode: HttpStatus.OK,
       data: randomQuestions,
+    };
+  }
+
+  @Post(':id/select')
+  async selectQuestions(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      questionsToSelect: number;
+      category?: string;
+      difficulty?: string;
+      excludeQuestions?: string[];
+    },
+  ) {
+    try {
+      const result = await this.poolSelectionService.selectQuestionsFromPool({
+        poolId: id,
+        ...body,
+      });
+
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Questions selected successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: error.message,
+      };
+    }
+  }
+
+  @Get(':id/stats')
+  async getPoolStats(@Param('id') id: string) {
+    try {
+      const stats = await this.poolSelectionService.getPoolStats(id);
+
+      return {
+        statusCode: HttpStatus.OK,
+        data: stats,
+      };
+    } catch (error) {
+      return {
+        statusCode: HttpStatus.NOT_FOUND,
+        message: error.message,
+      };
+    }
+  }
+
+  @Post('validate-configuration')
+  async validatePoolConfiguration(
+    @Body()
+    body: {
+      poolConfigs: Array<{
+        poolId: string;
+        questionsToSelect: number;
+        category?: string;
+        difficulty?: string;
+      }>;
+    },
+  ) {
+    const validation = await this.poolSelectionService.validatePoolConfigurations(
+      body.poolConfigs,
+    );
+
+    return {
+      statusCode: validation.valid ? HttpStatus.OK : HttpStatus.BAD_REQUEST,
+      data: validation,
     };
   }
 }

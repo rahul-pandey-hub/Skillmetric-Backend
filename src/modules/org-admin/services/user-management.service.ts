@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole } from '../../users/schemas/user.schema';
 import { CreateUserDto, UpdateUserDto } from '../dto/create-user.dto';
@@ -15,10 +15,37 @@ export class UserManagementService {
   ) {}
 
   async createUser(dto: CreateUserDto, organizationId: string) {
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
+
     // Check if user already exists
     const existingUser = await this.userModel.findOne({ email: dto.email });
+
     if (existingUser) {
-      throw new ConflictException('User with this email already exists');
+      // User exists - check if they already belong to this organization
+      const hasOrganization = existingUser.organizationIds.some(
+        (id) => id.toString() === orgId?.toString()
+      );
+
+      if (hasOrganization) {
+        throw new ConflictException(
+          'User with this email already belongs to this organization'
+        );
+      }
+
+      // Add organization to existing user
+      existingUser.organizationIds.push(orgId);
+      await existingUser.save();
+
+      return {
+        user: {
+          _id: existingUser._id,
+          name: existingUser.name,
+          email: existingUser.email,
+          role: existingUser.role,
+          isActive: existingUser.isActive,
+        },
+        message: 'User added to organization successfully',
+      };
     }
 
     // Validate role
@@ -30,13 +57,13 @@ export class UserManagementService {
     const tempPassword = dto.password || this.generateTemporaryPassword();
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
-    // Create user
+    // Create new user
     const user = new this.userModel({
       name: dto.name,
       email: dto.email,
       password: hashedPassword,
       role: dto.role,
-      organizationId,
+      organizationIds: orgId ? [orgId] : [],
       isActive: true,
       emailVerified: true,
       metadata: {
@@ -102,7 +129,18 @@ export class UserManagementService {
   async getAllUsers(filters: UserFiltersDto, organizationId: string) {
     const { role, search, department, batch, page = 1, limit = 10 } = filters;
 
-    const query: any = { organizationId };
+    console.log('🔍 [DEBUG] getAllUsers called with:');
+    console.log('  - organizationId (raw):', organizationId);
+    console.log('  - organizationId type:', typeof organizationId);
+    console.log('  - filters:', filters);
+
+    // Convert organizationId string to ObjectId for MongoDB query
+    const orgIdObject = organizationId ? new Types.ObjectId(organizationId) : null;
+    console.log('  - organizationId (ObjectId):', orgIdObject);
+
+    const query: any = {
+      organizationIds: { $in: [orgIdObject] }
+    };
 
     if (role) query.role = role;
     if (department) query['metadata.department'] = department;
@@ -113,6 +151,8 @@ export class UserManagementService {
         { email: { $regex: search, $options: 'i' } },
       ];
     }
+
+    console.log('  - Final query:', JSON.stringify(query, null, 2));
 
     const skip = (page - 1) * limit;
 
@@ -127,6 +167,12 @@ export class UserManagementService {
       this.userModel.countDocuments(query),
     ]);
 
+    console.log('  - Users found:', users.length);
+    console.log('  - Total count:', total);
+    if (users.length > 0) {
+      console.log('  - First user:', users[0].email);
+    }
+
     return {
       data: users,
       meta: {
@@ -139,8 +185,12 @@ export class UserManagementService {
   }
 
   async getUserById(id: string, organizationId: string) {
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
     const user = await this.userModel
-      .findOne({ _id: id, organizationId })
+      .findOne({
+        _id: id,
+        organizationIds: { $in: [orgId] }
+      })
       .select('-password')
       .exec();
 
@@ -152,9 +202,13 @@ export class UserManagementService {
   }
 
   async updateUser(id: string, dto: UpdateUserDto, organizationId: string) {
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
     const user = await this.userModel
       .findOneAndUpdate(
-        { _id: id, organizationId },
+        {
+          _id: id,
+          organizationIds: { $in: [orgId] }
+        },
         {
           ...(dto.name && { name: dto.name }),
           ...(dto.email && { email: dto.email }),
@@ -181,7 +235,11 @@ export class UserManagementService {
   }
 
   async toggleUserStatus(id: string, organizationId: string) {
-    const user = await this.userModel.findOne({ _id: id, organizationId });
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
+    const user = await this.userModel.findOne({
+      _id: id,
+      organizationIds: { $in: [orgId] }
+    });
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -197,15 +255,28 @@ export class UserManagementService {
   }
 
   async deleteUser(id: string, organizationId: string) {
-    const user = await this.userModel.findOneAndDelete({
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
+    // For multi-org users, remove org from array instead of deleting user
+    const user = await this.userModel.findOne({
       _id: id,
-      organizationId,
+      organizationIds: { $in: [orgId] }
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
+    // If user belongs to multiple orgs, just remove this org
+    if (user.organizationIds.length > 1) {
+      user.organizationIds = user.organizationIds.filter(
+        (oid) => oid.toString() !== orgId?.toString()
+      );
+      await user.save();
+      return { message: 'User removed from organization successfully' };
+    }
+
+    // If only one org, delete the user entirely
+    await this.userModel.findByIdAndDelete(id);
     return { message: 'User deleted successfully' };
   }
 

@@ -4,11 +4,13 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { RemoveQuestionsFromExamCommand } from '../impl/remove-questions-from-exam.command';
 import { Exam } from '../../schemas/exam.schema';
+import { Question } from '../../../questions/schemas/question.schema';
 
 @CommandHandler(RemoveQuestionsFromExamCommand)
 export class RemoveQuestionsFromExamHandler implements ICommandHandler<RemoveQuestionsFromExamCommand> {
   constructor(
     @InjectModel(Exam.name) private examModel: Model<Exam>,
+    @InjectModel(Question.name) private questionModel: Model<Question>,
   ) {}
 
   async execute(command: RemoveQuestionsFromExamCommand) {
@@ -34,6 +36,17 @@ export class RemoveQuestionsFromExamHandler implements ICommandHandler<RemoveQue
       q => !questionIds.includes(q.toString())
     );
 
+    // Recalculate total marks from remaining questions
+    const remainingQuestions = await this.questionModel.find({
+      _id: { $in: exam.questions }
+    });
+
+    exam.grading.totalMarks = remainingQuestions.reduce(
+      (sum, q) => sum + (q.marks || 0),
+      0
+    );
+    exam.totalQuestions = remainingQuestions.length;
+
     await exam.save();
 
     // Populate questions for response
@@ -41,6 +54,8 @@ export class RemoveQuestionsFromExamHandler implements ICommandHandler<RemoveQue
 
     return {
       message: 'Questions removed successfully',
+      totalQuestions: exam.totalQuestions,
+      totalMarks: exam.grading.totalMarks,
       exam,
     };
   }

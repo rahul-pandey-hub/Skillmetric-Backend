@@ -5,7 +5,10 @@ import { Result, ResultStatus } from '../schemas/result.schema';
 import { Question } from '../../questions/schemas/question.schema';
 import { Exam } from '../../exams/schemas/exam.schema';
 import { ExamSession } from '../../proctoring/schemas/exam-session.schema';
+import { User } from '../../users/schemas/user.schema';
 import { GradingUtil } from '../../../common/utils/grading.util';
+import { EmailService } from '../../email/services/email.service';
+import { CertificateService } from '../../certificates/services/certificate.service';
 
 @Injectable()
 export class GradingService {
@@ -14,6 +17,9 @@ export class GradingService {
     @InjectModel(Question.name) private questionModel: Model<Question>,
     @InjectModel(Exam.name) private examModel: Model<Exam>,
     @InjectModel(ExamSession.name) private sessionModel: Model<ExamSession>,
+    @InjectModel(User.name) private userModel: Model<User>,
+    private emailService: EmailService,
+    private certificateService: CertificateService,
   ) {}
 
   /**
@@ -23,7 +29,7 @@ export class GradingService {
     // Fetch session with answers
     const session = await this.sessionModel
       .findById(sessionId)
-      .populate('exam student')
+      .populate('examId studentId')
       .exec();
 
     if (!session) {
@@ -111,15 +117,39 @@ export class GradingService {
         )
       : 0;
 
-    // Determine pass/fail
-    const passingMarks = exam.grading?.passingMarks || totalPossibleMarks * 0.4;
-    const passed = scoreCalculation.totalMarks >= passingMarks;
+    // Apply late submission penalty if applicable
+    let finalScore = scoreCalculation.totalMarks;
+    let isLateSubmission = false;
+    let lateByMinutes = 0;
+    let penaltyApplied = 0;
 
-    // Calculate percentage
-    const percentage =
+    if (session.submittedAt && exam.schedule?.endDate) {
+      const submittedAt = new Date(session.submittedAt);
+      const endDate = new Date(exam.schedule.endDate);
+
+      if (submittedAt > endDate) {
+        isLateSubmission = true;
+        lateByMinutes = Math.floor(
+          (submittedAt.getTime() - endDate.getTime()) / (1000 * 60)
+        );
+
+        // Apply penalty if late submission is allowed
+        if (exam.schedule.lateSubmissionAllowed && exam.schedule.lateSubmissionPenalty) {
+          penaltyApplied = exam.schedule.lateSubmissionPenalty;
+          finalScore = Math.max(0, finalScore - penaltyApplied);
+        }
+      }
+    }
+
+    // Calculate final percentage after penalty
+    const finalPercentage =
       totalPossibleMarks > 0
-        ? (scoreCalculation.totalMarks / totalPossibleMarks) * 100
+        ? (finalScore / totalPossibleMarks) * 100
         : 0;
+
+    // Determine pass/fail based on final score
+    const passingMarks = exam.grading?.passingMarks || totalPossibleMarks * 0.4;
+    const passed = finalScore >= passingMarks;
 
     // Fetch violations count
     const violationsCount = session.violations?.length || 0;
@@ -139,9 +169,9 @@ export class GradingService {
         session: session._id,
         status,
         score: {
-          obtained: Math.max(0, scoreCalculation.totalMarks), // Ensure non-negative
+          obtained: Math.max(0, finalScore), // Use final score after penalty
           total: totalPossibleMarks,
-          percentage: Math.max(0, percentage), // Ensure non-negative
+          percentage: Math.max(0, finalPercentage), // Use final percentage after penalty
           passed,
         },
         questionResults,
@@ -159,6 +189,12 @@ export class GradingService {
           autoSubmitted: session.autoSubmitReason ? true : false,
           warningsIssued: session.warningCount || 0,
         },
+        lateSubmission: isLateSubmission ? {
+          isLate: true,
+          lateByMinutes,
+          penaltyApplied,
+          originalScore: scoreCalculation.totalMarks,
+        } : undefined,
       },
       { new: true, upsert: true },
     );
@@ -225,16 +261,100 @@ export class GradingService {
   }
 
   /**
-   * Publish results to students
+   * Publish results to students and send notification emails
    */
-  async publishResults(examId: string): Promise<void> {
-    await this.resultModel.updateMany(
-      { exam: examId, status: ResultStatus.GRADED },
-      {
-        status: ResultStatus.PUBLISHED,
-        publishedAt: new Date(),
-      },
-    );
+  async publishResults(examId: string): Promise<{ publishedCount: number; emailsQueued: number }> {
+    // Get exam details
+    const exam = await this.examModel.findById(examId).exec();
+    if (!exam) {
+      throw new NotFoundException('Exam not found');
+    }
+
+    // Get all GRADED results with student details
+    const results = await this.resultModel
+      .find({ exam: examId, status: ResultStatus.GRADED })
+      .populate('student')
+      .exec();
+
+    let publishedCount = 0;
+    let emailsQueued = 0;
+
+    for (const result of results) {
+      // Update result status
+      result.status = ResultStatus.PUBLISHED;
+      result.publishedAt = new Date();
+      await result.save();
+      publishedCount++;
+
+      // Generate certificate for passed students
+      let certificateUrl = result.certificate?.certificateUrl;
+      if (result.score?.passed && exam.resultsSettings?.generateCertificate) {
+        try {
+          certificateUrl = await this.certificateService.generateCertificate(
+            result._id.toString(),
+          );
+        } catch (error) {
+          console.error(
+            `Failed to generate certificate for result ${result._id}:`,
+            error,
+          );
+          // Continue even if certificate generation fails
+        }
+      }
+
+      // Queue result notification email
+      try {
+        const student = result.student as any;
+        await this.emailService.queueResultNotificationEmail({
+          studentId: student._id.toString(),
+          studentName: student.name,
+          studentEmail: student.email,
+          examId: examId,
+          examTitle: exam.title,
+          score: result.score.obtained,
+          totalMarks: result.score.total,
+          percentage: result.score.percentage,
+          passed: result.score.passed,
+          rank: result.rank,
+          percentile: result.percentile,
+          shortlisted: result.shortlisted,
+          certificateUrl: certificateUrl, // Use newly generated certificate URL
+          lateSubmission: result.lateSubmission,
+        });
+
+        // Track email sent
+        if (!result.emailTracking) {
+          result.emailTracking = {
+            enrollmentSent: false,
+            resultSent: true,
+            remindersSent: 0,
+          };
+        } else {
+          result.emailTracking.resultSent = true;
+        }
+        result.emailTracking.resultSentAt = new Date();
+        await result.save();
+
+        emailsQueued++;
+      } catch (error) {
+        console.error(`Failed to queue email for ${result.student}:`, error);
+
+        // Track email error
+        if (!result.emailTracking) {
+          result.emailTracking = {
+            enrollmentSent: false,
+            resultSent: false,
+            remindersSent: 0,
+          };
+        }
+        result.emailTracking.resultError = error.message;
+        await result.save();
+
+        // Continue with other emails even if one fails
+      }
+    }
+
+    return { publishedCount, emailsQueued };
   }
 
   /**

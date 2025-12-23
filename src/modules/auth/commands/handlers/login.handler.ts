@@ -34,10 +34,18 @@ export class LoginHandler implements ICommandHandler<LoginCommand> {
     await user.save();
 
     // Generate tokens
+    // For multi-org support: use first organization as default, or null if none
+    const defaultOrgId = user.organizationIds && user.organizationIds.length > 0
+      ? user.organizationIds[0]
+      : null;
+
     const payload = {
       sub: user._id,
+      userId: user._id,
       email: user.email,
       role: user.role,
+      organizationId: defaultOrgId, // Default org for backward compatibility
+      organizationIds: user.organizationIds, // Full list of orgs
     };
 
     const accessToken = this.jwtService.sign(payload);
@@ -46,10 +54,12 @@ export class LoginHandler implements ICommandHandler<LoginCommand> {
     return {
       user: {
         id: user._id,
-        name: user.name,
+        fullName: user.name,
         email: user.email,
         role: user.role,
         studentId: user.studentId,
+        organizationId: defaultOrgId?.toString(), // Default org
+        organizationIds: user.organizationIds.map(id => id.toString()), // All orgs
       },
       accessToken,
       refreshToken,

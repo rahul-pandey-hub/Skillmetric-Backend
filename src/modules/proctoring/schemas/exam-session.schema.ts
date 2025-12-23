@@ -31,6 +31,7 @@ export class ExamSession extends Document {
     type: string;
     details: any;
     timestamp: Date;
+    severity?: string;
   }>;
 
   @Prop({ required: true })
@@ -71,6 +72,6 @@ export const ExamSessionSchema = SchemaFactory.createForClass(ExamSession);
 
 // Indexes
 ExamSessionSchema.index({ sessionCode: 1 });
-ExamSessionSchema.index({ exam: 1, student: 1 });
-ExamSessionSchema.index({ status: 1, 'timing.startTime': -1 });
+ExamSessionSchema.index({ examId: 1, studentId: 1 });
+ExamSessionSchema.index({ status: 1, startTime: -1 });
 ExamSessionSchema.index({ warningCount: 1 });

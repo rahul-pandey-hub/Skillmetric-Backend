@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Question } from '../../questions/schemas/question.schema';
 import { CreateQuestionDto, UpdateQuestionDto, QuestionFiltersDto } from '../dto/create-question.dto';
 
@@ -13,8 +13,8 @@ export class QuestionManagementService {
   async createQuestion(dto: CreateQuestionDto, organizationId: string, userId: string) {
     const question = new this.questionModel({
       ...dto,
-      organizationId,
-      createdBy: userId,
+      organizationId: organizationId ? new Types.ObjectId(organizationId) : null,
+      createdBy: userId ? new Types.ObjectId(userId) : null,
       isActive: dto.isActive ?? true,
       isPublic: dto.isPublic ?? false,
     });
@@ -50,7 +50,8 @@ export class QuestionManagementService {
   async getAllQuestions(filters: QuestionFiltersDto, organizationId: string) {
     const { type, difficulty, category, search, tags, page = 1, limit = 10 } = filters;
 
-    const query: any = { organizationId };
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
+    const query: any = { organizationId: orgId };
 
     if (type) query.type = type;
     if (difficulty) query.difficulty = difficulty;
@@ -93,8 +94,9 @@ export class QuestionManagementService {
   }
 
   async getQuestionById(id: string, organizationId: string) {
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
     const question = await this.questionModel
-      .findOne({ _id: id, organizationId })
+      .findOne({ _id: id, organizationId: orgId })
       .populate('createdBy', 'name email')
       .exec();
 
@@ -106,9 +108,10 @@ export class QuestionManagementService {
   }
 
   async updateQuestion(id: string, dto: UpdateQuestionDto, organizationId: string) {
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
     const question = await this.questionModel
       .findOneAndUpdate(
-        { _id: id, organizationId },
+        { _id: id, organizationId: orgId },
         { $set: dto },
         { new: true },
       )
@@ -122,9 +125,10 @@ export class QuestionManagementService {
   }
 
   async deleteQuestion(id: string, organizationId: string) {
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
     const question = await this.questionModel.findOneAndDelete({
       _id: id,
-      organizationId,
+      organizationId: orgId,
     });
 
     if (!question) {
@@ -135,7 +139,8 @@ export class QuestionManagementService {
   }
 
   async toggleQuestionStatus(id: string, organizationId: string) {
-    const question = await this.questionModel.findOne({ _id: id, organizationId });
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
+    const question = await this.questionModel.findOne({ _id: id, organizationId: orgId });
 
     if (!question) {
       throw new NotFoundException('Question not found');
@@ -151,23 +156,24 @@ export class QuestionManagementService {
   }
 
   async getQuestionStatistics(organizationId: string) {
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
     const [
       totalQuestions,
       questionsByType,
       questionsByDifficulty,
       questionsByCategory,
     ] = await Promise.all([
-      this.questionModel.countDocuments({ organizationId }),
+      this.questionModel.countDocuments({ organizationId: orgId }),
       this.questionModel.aggregate([
-        { $match: { organizationId } },
+        { $match: { organizationId: orgId } },
         { $group: { _id: '$type', count: { $sum: 1 } } },
       ]),
       this.questionModel.aggregate([
-        { $match: { organizationId } },
+        { $match: { organizationId: orgId } },
         { $group: { _id: '$difficulty', count: { $sum: 1 } } },
       ]),
       this.questionModel.aggregate([
-        { $match: { organizationId } },
+        { $match: { organizationId: orgId } },
         { $group: { _id: '$category', count: { $sum: 1 } } },
       ]),
     ]);

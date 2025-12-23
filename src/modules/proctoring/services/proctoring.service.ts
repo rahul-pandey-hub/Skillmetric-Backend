@@ -20,17 +20,17 @@ export class ProctoringService {
 
   async getExamSessions(examId: string) {
     return this.sessionModel
-      .find({ exam: examId })
-      .populate('student', 'name email studentId')
-      .sort({ 'timing.startTime': -1 })
+      .find({ examId: examId })
+      .populate('studentId', 'name email studentId')
+      .sort({ startTime: -1 })
       .exec();
   }
 
   async getSessionDetails(sessionId: string) {
     return this.sessionModel
       .findById(sessionId)
-      .populate('student', 'name email studentId')
-      .populate('exam', 'title code')
+      .populate('studentId', 'name email studentId')
+      .populate('examId', 'title code')
       .populate('violations')
       .exec();
   }

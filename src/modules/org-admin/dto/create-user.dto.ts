@@ -4,7 +4,10 @@ import {
   IsEnum,
   IsOptional,
   MinLength,
+  IsArray,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '../../users/schemas/user.schema';
 
@@ -50,6 +53,9 @@ export class CreateUserDto {
 
 export class BulkCreateUsersDto {
   @ApiProperty({ type: [CreateUserDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateUserDto)
   users: CreateUserDto[];
 }
 

@@ -210,8 +210,8 @@ export class User extends Document {
   @Prop({ type: String, enum: UserRole, default: UserRole.STUDENT })
   role: UserRole;
 
-  @Prop({ type: Types.ObjectId, ref: 'Organization', default: null })
-  organizationId?: Types.ObjectId;
+  @Prop({ type: [Types.ObjectId], ref: 'Organization', default: [] })
+  organizationIds: Types.ObjectId[];
 
   @Prop({ default: true })
   isActive: boolean;
@@ -258,24 +258,24 @@ export class User extends Document {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
-// Pre-save hook to validate organizationId requirement
+// Pre-save hook to validate organizationIds requirement
 UserSchema.pre('save', function (next) {
   const user = this as User;
 
-  // SUPER_ADMIN doesn't need organizationId
+  // SUPER_ADMIN doesn't need organizationIds
   if (user.role === UserRole.SUPER_ADMIN) {
-    user.organizationId = undefined; // Ensure SUPER_ADMIN has no organizationId
+    user.organizationIds = []; // Ensure SUPER_ADMIN has no organizationIds
     return next();
   }
 
-  // All other roles MUST have organizationId (except STUDENT during enrollment)
+  // All other roles MUST have at least one organizationId (except STUDENT during enrollment)
   if (
     user.role !== UserRole.STUDENT &&
-    !user.organizationId
+    (!user.organizationIds || user.organizationIds.length === 0)
   ) {
     return next(
       new Error(
-        `Users with role ${user.role} must belong to an organization. Please provide organizationId.`,
+        `Users with role ${user.role} must belong to at least one organization. Please provide organizationIds.`,
       ),
     );
   }
@@ -287,6 +287,6 @@ UserSchema.pre('save', function (next) {
 UserSchema.index({ email: 1 });
 UserSchema.index({ studentId: 1 });
 UserSchema.index({ role: 1, isActive: 1 });
-UserSchema.index({ organizationId: 1, role: 1 });
+UserSchema.index({ organizationIds: 1, role: 1 });
 UserSchema.index({ 'profile.college': 1 });
 UserSchema.index({ 'profile.graduationYear': 1 });

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { User } from '../../users/schemas/user.schema';
 import { Question } from '../../questions/schemas/question.schema';
 
@@ -12,6 +12,12 @@ export class OrgAnalyticsService {
   ) {}
 
   async getOrganizationStats(organizationId: string) {
+    console.log('🔍 Querying with organizationId:', organizationId, 'Type:', typeof organizationId);
+
+    // Convert to ObjectId
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
+    console.log('🔍 Converted to ObjectId:', orgId);
+
     const [
       totalUsers,
       activeUsers,
@@ -20,19 +26,21 @@ export class OrgAnalyticsService {
       usersByRole,
       usersByDepartment,
     ] = await Promise.all([
-      this.userModel.countDocuments({ organizationId }),
-      this.userModel.countDocuments({ organizationId, isActive: true }),
-      this.questionModel.countDocuments({ organizationId }),
-      this.questionModel.countDocuments({ organizationId, isActive: true }),
+      this.userModel.countDocuments({ organizationIds: { $in: [orgId] } }),
+      this.userModel.countDocuments({ organizationIds: { $in: [orgId] }, isActive: true }),
+      this.questionModel.countDocuments({ organizationId: orgId }),
+      this.questionModel.countDocuments({ organizationId: orgId, isActive: true }),
       this.userModel.aggregate([
-        { $match: { organizationId } },
+        { $match: { organizationIds: { $in: [orgId] } } },
         { $group: { _id: '$role', count: { $sum: 1 } } },
       ]),
       this.userModel.aggregate([
-        { $match: { organizationId } },
+        { $match: { organizationIds: { $in: [orgId] } } },
         { $group: { _id: '$metadata.department', count: { $sum: 1 } } },
       ]),
     ]);
+
+    console.log('📊 Query results - Users:', totalUsers, 'Questions:', totalQuestions);
 
     return {
       users: {
@@ -51,8 +59,9 @@ export class OrgAnalyticsService {
   }
 
   async getDepartmentComparison(organizationId: string) {
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
     const departmentStats = await this.userModel.aggregate([
-      { $match: { organizationId } },
+      { $match: { organizationIds: { $in: [orgId] } } },
       {
         $group: {
           _id: '$metadata.department',
@@ -70,8 +79,9 @@ export class OrgAnalyticsService {
   }
 
   async getBatchComparison(organizationId: string) {
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
     const batchStats = await this.userModel.aggregate([
-      { $match: { organizationId } },
+      { $match: { organizationIds: { $in: [orgId] } } },
       {
         $group: {
           _id: '$metadata.batch',
@@ -89,18 +99,19 @@ export class OrgAnalyticsService {
   }
 
   async getQuestionBankAnalytics(organizationId: string) {
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
     const [questionsByType, questionsByDifficulty, questionsByCategory] =
       await Promise.all([
         this.questionModel.aggregate([
-          { $match: { organizationId } },
+          { $match: { organizationId: orgId } },
           { $group: { _id: '$type', count: { $sum: 1 } } },
         ]),
         this.questionModel.aggregate([
-          { $match: { organizationId } },
+          { $match: { organizationId: orgId } },
           { $group: { _id: '$difficulty', count: { $sum: 1 } } },
         ]),
         this.questionModel.aggregate([
-          { $match: { organizationId } },
+          { $match: { organizationId: orgId } },
           { $group: { _id: '$category', count: { $sum: 1 } } },
         ]),
       ]);
@@ -113,18 +124,19 @@ export class OrgAnalyticsService {
   }
 
   async getRecentActivity(organizationId: string, days: number = 7) {
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
     const dateThreshold = new Date();
     dateThreshold.setDate(dateThreshold.getDate() - days);
 
     const [recentUsers, recentQuestions] = await Promise.all([
       this.userModel
-        .find({ organizationId, createdAt: { $gte: dateThreshold } })
+        .find({ organizationIds: { $in: [orgId] }, createdAt: { $gte: dateThreshold } })
         .select('name email role createdAt')
         .sort({ createdAt: -1 })
         .limit(10)
         .exec(),
       this.questionModel
-        .find({ organizationId, createdAt: { $gte: dateThreshold } })
+        .find({ organizationId: orgId, createdAt: { $gte: dateThreshold } })
         .select('text type difficulty createdAt createdBy')
         .populate('createdBy', 'name email')
         .sort({ createdAt: -1 })
@@ -140,11 +152,12 @@ export class OrgAnalyticsService {
   }
 
   async getUserGrowthTrend(organizationId: string, months: number = 6) {
+    const orgId = organizationId ? new Types.ObjectId(organizationId) : null;
     const startDate = new Date();
     startDate.setMonth(startDate.getMonth() - months);
 
     const userGrowth = await this.userModel.aggregate([
-      { $match: { organizationId, createdAt: { $gte: startDate } } },
+      { $match: { organizationIds: { $in: [orgId] }, createdAt: { $gte: startDate } } },
       {
         $group: {
           _id: {
