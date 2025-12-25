@@ -79,7 +79,7 @@ export class AssignAdminHandler implements ICommandHandler<AssignAdminCommand> {
       name: admin.name,
       email: admin.email,
       role: admin.role,
-      organizationId: admin.organizationId.toString(),
+      organizationId: organizationId.toString(),
       temporaryPassword: password ? undefined : finalPassword, // Only return if auto-generated
     };
   }
