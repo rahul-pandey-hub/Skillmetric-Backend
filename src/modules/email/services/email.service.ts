@@ -54,6 +54,44 @@ export interface ExamReminderEmailData {
   reminderType: '24h' | '1h';
 }
 
+export interface ExamInvitationEmailData {
+  candidateName: string;
+  candidateEmail: string;
+  examTitle: string;
+  examDescription?: string;
+  invitationToken: string;
+  invitationUrl: string;
+  expiresAt: Date;
+  duration: number; // in minutes
+  organizationName?: string;
+  invitedBy?: string;
+  invitationNote?: string;
+}
+
+export interface InvitationReminderEmailData {
+  candidateName: string;
+  candidateEmail: string;
+  examTitle: string;
+  invitationToken: string;
+  invitationUrl: string;
+  expiresAt: Date;
+  hoursUntilExpiry: number;
+}
+
+export interface RecruitmentResultEmailData {
+  candidateName: string;
+  candidateEmail: string;
+  examTitle: string;
+  score?: number;
+  totalMarks?: number;
+  percentage?: number;
+  rank?: number;
+  showScore: boolean;
+  showRank: boolean;
+  customMessage?: string;
+  organizationName?: string;
+}
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -1142,6 +1180,709 @@ The SkillMetric Team
       return info;
     } catch (error) {
       this.logger.error(`Failed to send exam reminder email to ${studentEmail}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Queue exam invitation email
+   */
+  async queueExamInvitationEmail(data: ExamInvitationEmailData) {
+    try {
+      await this.emailQueue.add('exam-invitation', data, {
+        priority: 1, // High priority
+      });
+      this.logger.log(`Queued invitation email for ${data.candidateEmail}`);
+    } catch (error) {
+      this.logger.error(`Failed to queue invitation email for ${data.candidateEmail}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Queue bulk exam invitation emails
+   */
+  async queueBulkExamInvitations(invitations: ExamInvitationEmailData[]) {
+    try {
+      const jobs = invitations.map((invitation, index) => ({
+        name: 'exam-invitation',
+        data: invitation,
+        opts: {
+          priority: 1,
+          delay: index * 100, // Stagger emails by 100ms to avoid rate limits
+        },
+      }));
+
+      await this.emailQueue.addBulk(jobs);
+      this.logger.log(`Queued ${invitations.length} invitation emails`);
+    } catch (error) {
+      this.logger.error('Failed to queue bulk invitation emails:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send exam invitation email (called by processor)
+   */
+  async sendExamInvitationEmail(data: ExamInvitationEmailData) {
+    const {
+      candidateName,
+      candidateEmail,
+      examTitle,
+      examDescription,
+      invitationUrl,
+      expiresAt,
+      duration,
+      organizationName,
+      invitedBy,
+      invitationNote,
+    } = data;
+
+    const expiryDateFormatted = new Date(expiresAt).toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const daysUntilExpiry = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px 20px;
+      text-align: center;
+      border-radius: 5px 5px 0 0;
+    }
+    .content {
+      background-color: white;
+      padding: 30px;
+      border-radius: 0 0 5px 5px;
+    }
+    .invitation-card {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: white;
+      padding: 25px;
+      border-radius: 10px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .exam-details {
+      background-color: #f5f5f5;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+    .detail-label {
+      font-weight: bold;
+      color: #666;
+    }
+    .detail-value {
+      color: #333;
+    }
+    .button {
+      display: inline-block;
+      padding: 15px 40px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+      margin: 20px 0;
+      font-weight: bold;
+      font-size: 18px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .note-box {
+      background-color: #e3f2fd;
+      border-left: 4px solid #2196f3;
+      padding: 15px;
+      margin: 20px 0;
+    }
+    .warning-box {
+      background-color: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 15px;
+      margin: 20px 0;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 20px;
+      color: #666;
+      font-size: 12px;
+    }
+    .instructions {
+      background-color: #f5f5f5;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    .instruction-step {
+      padding: 10px 0;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    .instruction-step:last-child {
+      border-bottom: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>You're Invited to Take an Assessment!</h1>
+    </div>
+    <div class="content">
+      <h2>Hello ${candidateName}!</h2>
+
+      ${organizationName ? `<p>You've been invited by <strong>${organizationName}</strong> to take an assessment.</p>` : ''}
+      ${invitedBy ? `<p>Invited by: <strong>${invitedBy}</strong></p>` : ''}
+
+      <div class="invitation-card">
+        <h2 style="margin-top: 0;">${examTitle}</h2>
+        ${examDescription ? `<p style="opacity: 0.9; font-size: 16px;">${examDescription}</p>` : ''}
+      </div>
+
+      ${invitationNote ? `
+      <div class="note-box">
+        <strong>Note from the recruiter:</strong>
+        <p style="margin: 10px 0 0 0;">${invitationNote}</p>
+      </div>
+      ` : ''}
+
+      <div class="exam-details">
+        <h3 style="margin-top: 0;">Assessment Details</h3>
+        <div class="detail-row">
+          <span class="detail-label">Duration:</span>
+          <span class="detail-value">${duration} minutes</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Invitation Expires:</span>
+          <span class="detail-value">${expiryDateFormatted}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Valid For:</span>
+          <span class="detail-value">${daysUntilExpiry} day${daysUntilExpiry !== 1 ? 's' : ''}</span>
+        </div>
+      </div>
+
+      <div class="warning-box">
+        <strong>⚠️ Important:</strong> This invitation link is unique to you and can only be used once. Please complete the assessment before the expiration date.
+      </div>
+
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${invitationUrl}" class="button">
+          🚀 Start Assessment
+        </a>
+      </div>
+
+      <div class="instructions">
+        <h3 style="margin-top: 0;">How to Get Started:</h3>
+        <div class="instruction-step">
+          <strong>1.</strong> Click the "Start Assessment" button above
+        </div>
+        <div class="instruction-step">
+          <strong>2.</strong> Review the assessment details and instructions
+        </div>
+        <div class="instruction-step">
+          <strong>3.</strong> Ensure you have a stable internet connection
+        </div>
+        <div class="instruction-step">
+          <strong>4.</strong> Complete the assessment within the time limit
+        </div>
+        <div class="instruction-step">
+          <strong>5.</strong> Submit your responses when finished
+        </div>
+      </div>
+
+      <p style="color: #666; font-size: 14px; margin-top: 30px;">
+        <strong>No registration required!</strong> Simply click the link above to begin your assessment. Make sure you're in a quiet environment with a stable internet connection.
+      </p>
+
+      <p style="color: #666; font-size: 14px;">
+        If you have any questions or technical issues, please contact the organization that sent you this invitation.
+      </p>
+
+      <p>Best of luck!<br>The SkillMetric Team</p>
+    </div>
+    <div class="footer">
+      <p>This is an automated invitation email. Please do not reply to this message.</p>
+      <p>If you did not expect this invitation, you can safely ignore this email.</p>
+      <p>&copy; ${new Date().getFullYear()} SkillMetric. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    const textContent = `
+You're Invited to Take an Assessment!
+
+Hello ${candidateName},
+
+${organizationName ? `You've been invited by ${organizationName} to take an assessment.` : ''}
+${invitedBy ? `Invited by: ${invitedBy}` : ''}
+
+ASSESSMENT: ${examTitle}
+${examDescription ? `\n${examDescription}\n` : ''}
+
+${invitationNote ? `\nNote from the recruiter:\n${invitationNote}\n` : ''}
+
+ASSESSMENT DETAILS:
+- Duration: ${duration} minutes
+- Invitation Expires: ${expiryDateFormatted}
+- Valid For: ${daysUntilExpiry} day${daysUntilExpiry !== 1 ? 's' : ''}
+
+⚠️ IMPORTANT: This invitation link is unique to you and can only be used once. Please complete the assessment before the expiration date.
+
+START ASSESSMENT: ${invitationUrl}
+
+HOW TO GET STARTED:
+1. Click the link above
+2. Review the assessment details and instructions
+3. Ensure you have a stable internet connection
+4. Complete the assessment within the time limit
+5. Submit your responses when finished
+
+No registration required! Simply click the link to begin your assessment. Make sure you're in a quiet environment with a stable internet connection.
+
+If you have any questions or technical issues, please contact the organization that sent you this invitation.
+
+Best of luck!
+The SkillMetric Team
+
+---
+This is an automated invitation email. Please do not reply to this message.
+If you did not expect this invitation, you can safely ignore this email.
+    `;
+
+    const mailOptions = {
+      from: `"${organizationName || 'SkillMetric'}" <${this.configService.get('SMTP_FROM', this.configService.get('SMTP_USER'))}>`,
+      to: candidateEmail,
+      subject: `Invitation to Assessment: ${examTitle}`,
+      text: textContent,
+      html: htmlContent,
+    };
+
+    try {
+      const info = await this.transporter.sendMail(mailOptions);
+      this.logger.log(`Invitation email sent successfully to ${candidateEmail}: ${info.messageId}`);
+      return info;
+    } catch (error) {
+      this.logger.error(`Failed to send invitation email to ${candidateEmail}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Queue invitation reminder email
+   */
+  async queueInvitationReminderEmail(data: InvitationReminderEmailData) {
+    try {
+      await this.emailQueue.add('invitation-reminder', data, {
+        priority: 1,
+      });
+      this.logger.log(`Queued invitation reminder for ${data.candidateEmail}`);
+    } catch (error) {
+      this.logger.error(`Failed to queue invitation reminder for ${data.candidateEmail}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send invitation reminder email (called by processor)
+   */
+  async sendInvitationReminderEmail(data: InvitationReminderEmailData) {
+    const {
+      candidateName,
+      candidateEmail,
+      examTitle,
+      invitationUrl,
+      expiresAt,
+      hoursUntilExpiry,
+    } = data;
+
+    const expiryDateFormatted = new Date(expiresAt).toLocaleString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+    .header {
+      background-color: #dc2626;
+      color: white;
+      padding: 20px;
+      text-align: center;
+      border-radius: 5px 5px 0 0;
+    }
+    .content {
+      background-color: white;
+      padding: 30px;
+      border-radius: 0 0 5px 5px;
+    }
+    .urgent-box {
+      background-color: #fee2e2;
+      border-left: 4px solid #dc2626;
+      padding: 20px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .time-remaining {
+      font-size: 36px;
+      font-weight: bold;
+      color: #dc2626;
+      margin: 10px 0;
+    }
+    .button {
+      display: inline-block;
+      padding: 15px 40px;
+      background-color: #dc2626;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+      margin: 20px 0;
+      font-weight: bold;
+      font-size: 18px;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 20px;
+      color: #666;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>⚠️ Assessment Invitation Expiring Soon!</h1>
+    </div>
+    <div class="content">
+      <h2>Hello ${candidateName}!</h2>
+
+      <div class="urgent-box">
+        <p style="font-size: 18px; margin: 0;"><strong>Your invitation to take the assessment</strong></p>
+        <h3 style="margin: 10px 0;">"${examTitle}"</h3>
+        <p style="font-size: 16px; margin: 10px 0;">is expiring in:</p>
+        <div class="time-remaining">${hoursUntilExpiry} hour${hoursUntilExpiry !== 1 ? 's' : ''}</div>
+        <p style="color: #666; margin: 10px 0;">Expires on: ${expiryDateFormatted}</p>
+      </div>
+
+      <p style="font-size: 16px; color: #666;">
+        This is a friendly reminder that your assessment invitation will expire soon. Don't miss this opportunity to showcase your skills!
+      </p>
+
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${invitationUrl}" class="button">
+          Take Assessment Now
+        </a>
+      </div>
+
+      <p style="color: #999; font-size: 14px; margin-top: 30px;">
+        If you've already completed the assessment, you can ignore this reminder.
+      </p>
+
+      <p>Best regards,<br>The SkillMetric Team</p>
+    </div>
+    <div class="footer">
+      <p>This is an automated reminder email.</p>
+      <p>&copy; ${new Date().getFullYear()} SkillMetric. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    const textContent = `
+⚠️ ASSESSMENT INVITATION EXPIRING SOON!
+
+Hello ${candidateName},
+
+Your invitation to take the assessment "${examTitle}" is expiring in ${hoursUntilExpiry} hour${hoursUntilExpiry !== 1 ? 's' : ''}!
+
+Expires on: ${expiryDateFormatted}
+
+This is a friendly reminder that your assessment invitation will expire soon. Don't miss this opportunity to showcase your skills!
+
+TAKE ASSESSMENT NOW: ${invitationUrl}
+
+If you've already completed the assessment, you can ignore this reminder.
+
+Best regards,
+The SkillMetric Team
+
+---
+This is an automated reminder email.
+    `;
+
+    const mailOptions = {
+      from: `"SkillMetric Platform" <${this.configService.get('SMTP_FROM', this.configService.get('SMTP_USER'))}>`,
+      to: candidateEmail,
+      subject: `⚠️ Reminder: Assessment Invitation Expiring Soon - ${examTitle}`,
+      text: textContent,
+      html: htmlContent,
+    };
+
+    try {
+      const info = await this.transporter.sendMail(mailOptions);
+      this.logger.log(`Invitation reminder sent successfully to ${candidateEmail}: ${info.messageId}`);
+      return info;
+    } catch (error) {
+      this.logger.error(`Failed to send invitation reminder to ${candidateEmail}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Queue recruitment result confirmation email
+   */
+  async queueRecruitmentResultEmail(data: RecruitmentResultEmailData) {
+    try {
+      await this.emailQueue.add('recruitment-result', data, {
+        priority: 1,
+      });
+      this.logger.log(`Queued recruitment result email for ${data.candidateEmail}`);
+    } catch (error) {
+      this.logger.error(`Failed to queue recruitment result for ${data.candidateEmail}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send recruitment result confirmation email (called by processor)
+   */
+  async sendRecruitmentResultEmail(data: RecruitmentResultEmailData) {
+    const {
+      candidateName,
+      candidateEmail,
+      examTitle,
+      score,
+      totalMarks,
+      percentage,
+      rank,
+      showScore,
+      showRank,
+      customMessage,
+      organizationName,
+    } = data;
+
+    const defaultMessage = 'Thank you for completing the assessment. Your responses have been submitted successfully and are being reviewed by our team.';
+    const message = customMessage || defaultMessage;
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px 20px;
+      text-align: center;
+      border-radius: 5px 5px 0 0;
+    }
+    .content {
+      background-color: white;
+      padding: 30px;
+      border-radius: 0 0 5px 5px;
+    }
+    .success-icon {
+      text-align: center;
+      font-size: 64px;
+      margin: 20px 0;
+    }
+    .message-box {
+      background-color: #e3f2fd;
+      border-left: 4px solid #2196f3;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    .score-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 25px;
+      border-radius: 10px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .score-big {
+      font-size: 48px;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+    .stats-row {
+      display: flex;
+      justify-content: space-around;
+      margin: 20px 0;
+    }
+    .stat-box {
+      text-align: center;
+      padding: 15px;
+    }
+    .stat-label {
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 14px;
+    }
+    .stat-value {
+      font-size: 32px;
+      font-weight: bold;
+      color: white;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 20px;
+      color: #666;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Assessment Completed Successfully!</h1>
+    </div>
+    <div class="content">
+      <div class="success-icon">✓</div>
+
+      <h2 style="text-align: center;">Hello ${candidateName}!</h2>
+
+      <p style="text-align: center; font-size: 18px; color: #666;">
+        Thank you for completing <strong>${examTitle}</strong>
+        ${organizationName ? ` for <strong>${organizationName}</strong>` : ''}
+      </p>
+
+      <div class="message-box">
+        <p style="margin: 0;">${message}</p>
+      </div>
+
+      ${showScore && score !== undefined && totalMarks !== undefined ? `
+      <div class="score-card">
+        <div style="font-size: 18px; opacity: 0.9;">Your Score</div>
+        <div class="score-big">${score} / ${totalMarks}</div>
+        ${percentage !== undefined ? `<div style="font-size: 24px; margin-top: 10px;">${percentage.toFixed(2)}%</div>` : ''}
+
+        ${showRank && rank !== undefined ? `
+        <div class="stats-row">
+          <div class="stat-box">
+            <div class="stat-label">Your Rank</div>
+            <div class="stat-value">#${rank}</div>
+          </div>
+        </div>
+        ` : ''}
+      </div>
+      ` : ''}
+
+      <p style="color: #666; font-size: 14px; margin-top: 30px; text-align: center;">
+        ${showScore ?
+          'If you have any questions about your results, please contact the organization.' :
+          'You will be notified if you are selected to proceed to the next stage.'
+        }
+      </p>
+
+      <p style="text-align: center;">Best regards,<br>${organizationName || 'The SkillMetric Team'}</p>
+    </div>
+    <div class="footer">
+      <p>This is an automated confirmation email.</p>
+      <p>&copy; ${new Date().getFullYear()} SkillMetric. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    const textContent = `
+ASSESSMENT COMPLETED SUCCESSFULLY!
+
+Hello ${candidateName},
+
+Thank you for completing ${examTitle}${organizationName ? ` for ${organizationName}` : ''}
+
+${message}
+
+${showScore && score !== undefined && totalMarks !== undefined ? `
+YOUR SCORE: ${score} / ${totalMarks}${percentage !== undefined ? ` (${percentage.toFixed(2)}%)` : ''}
+${showRank && rank !== undefined ? `YOUR RANK: #${rank}` : ''}
+` : ''}
+
+${showScore ?
+  'If you have any questions about your results, please contact the organization.' :
+  'You will be notified if you are selected to proceed to the next stage.'
+}
+
+Best regards,
+${organizationName || 'The SkillMetric Team'}
+
+---
+This is an automated confirmation email.
+    `;
+
+    const mailOptions = {
+      from: `"${organizationName || 'SkillMetric'}" <${this.configService.get('SMTP_FROM', this.configService.get('SMTP_USER'))}>`,
+      to: candidateEmail,
+      subject: `Assessment Completed - ${examTitle}`,
+      text: textContent,
+      html: htmlContent,
+    };
+
+    try {
+      const info = await this.transporter.sendMail(mailOptions);
+      this.logger.log(`Recruitment result email sent successfully to ${candidateEmail}: ${info.messageId}`);
+      return info;
+    } catch (error) {
+      this.logger.error(`Failed to send recruitment result email to ${candidateEmail}:`, error);
       throw error;
     }
   }

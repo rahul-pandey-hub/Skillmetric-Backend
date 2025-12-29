@@ -25,6 +25,7 @@ import { ShortlistingModule } from './modules/shortlisting/shortlisting.module';
 import { SystemConfigModule } from './modules/system-config/system-config.module';
 import { OrgAdminModule } from './modules/org-admin/org-admin.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -75,6 +76,7 @@ import { MonitoringModule } from './modules/monitoring/monitoring.module';
     ShortlistingModule,
     SystemConfigModule,
     OrgAdminModule,
+    AdminModule,
     MonitoringModule,
     StudentsModule,
     NotificationsModule,

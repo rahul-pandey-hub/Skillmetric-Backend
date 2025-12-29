@@ -56,35 +56,64 @@ export class ProctoringGateway
   @SubscribeMessage('start-exam')
   async handleStartExam(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { examId: string; studentId: string },
+    @MessageBody() data: {
+      examId: string;
+      studentId?: string;
+      sessionId?: string;
+      accessSource?: string;
+    },
   ) {
     try {
-      const { examId, studentId } = data;
+      const { examId, studentId, sessionId, accessSource } = data;
 
-      // Create new exam session
-      const sessionCode = this.generateSessionCode();
-      const session = new this.sessionModel({
-        sessionCode,
-        examId: examId,
-        studentId: studentId,
-        status: SessionStatus.IN_PROGRESS,
-        warningCount: 0,
-        startTime: new Date(),
-        violations: [],
-        answers: [],
-      });
+      let session;
 
-      await session.save();
+      if (sessionId) {
+        // Session already exists (invitation-based or resumed exam)
+        session = await this.sessionModel.findById(sessionId);
+
+        if (!session) {
+          client.emit('error', { message: 'Session not found' });
+          return;
+        }
+
+        this.logger.log(`Joining existing session ${sessionId} (${accessSource || 'ENROLLMENT'})`);
+      } else {
+        // Create new exam session (regular student exam)
+        const exam = await this.examModel.findById(examId);
+        if (!exam) {
+          client.emit('error', { message: 'Exam not found' });
+          return;
+        }
+
+        const sessionCode = this.generateSessionCode();
+        const startTime = new Date();
+        const endTime = new Date(startTime.getTime() + exam.duration * 60 * 1000);
+
+        session = new this.sessionModel({
+          sessionCode,
+          examId: examId,
+          studentId: studentId,
+          status: SessionStatus.IN_PROGRESS,
+          warningCount: 0,
+          startTime,
+          endTime,
+          violations: [],
+          answers: [],
+        });
+
+        await session.save();
+        this.logger.log(`Created new exam session for student ${studentId}`);
+      }
 
       client.join(`session-${session._id}`);
 
       client.emit('exam-started', {
         sessionId: session._id,
         sessionCode: session.sessionCode,
-        message: 'Exam session started successfully',
+        message: sessionId ? 'Joined exam session' : 'Exam session started successfully',
       });
 
-      this.logger.log(`Exam started for student ${studentId}`);
     } catch (error) {
       this.logger.error('Error starting exam:', error);
       client.emit('error', { message: 'Failed to start exam' });
@@ -124,9 +153,8 @@ export class ProctoringGateway
       }
 
       // Create violation record
-      const violation = new this.violationModel({
+      const violationData: any = {
         session: sessionId,
-        student: session.studentId,
         exam: session.examId,
         type: type,
         severity: this.determineSeverity(type),
@@ -139,8 +167,16 @@ export class ProctoringGateway
           status: 'PENDING',
         },
         warningIssued: true,
-      });
+      };
 
+      // Set student OR invitation based on access source
+      if (session.accessSource === 'INVITATION' && session.invitationId) {
+        violationData.invitation = session.invitationId;
+      } else if (session.studentId) {
+        violationData.student = session.studentId;
+      }
+
+      const violation = new this.violationModel(violationData);
       await violation.save();
 
       // SERVER-SIDE INCREMENT - CANNOT BE MANIPULATED BY CLIENT

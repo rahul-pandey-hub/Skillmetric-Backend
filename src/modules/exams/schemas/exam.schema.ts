@@ -17,6 +17,18 @@ export enum ExamType {
   MOCK_TEST = 'MOCK_TEST',
 }
 
+export enum ExamCategory {
+  INTERNAL_ASSESSMENT = 'INTERNAL_ASSESSMENT', // Type 1: For registered employees
+  RECRUITMENT = 'RECRUITMENT',                  // Type 2: One-time recruitment access
+  GENERAL_ASSESSMENT = 'GENERAL_ASSESSMENT',   // Type 3: For registered candidates (non-recruitment)
+}
+
+export enum ExamAccessMode {
+  ENROLLMENT_BASED = 'ENROLLMENT_BASED',   // Traditional: Users must be enrolled
+  INVITATION_BASED = 'INVITATION_BASED',   // New: Access via invitation tokens
+  HYBRID = 'HYBRID',                        // Both enrollment and invitation allowed
+}
+
 export enum GradingScheme {
   PERCENTAGE = 'PERCENTAGE',
   LETTER_GRADE = 'LETTER_GRADE',
@@ -308,6 +320,34 @@ export class Exam extends Document {
 
   @Prop({ type: Date })
   completedAt?: Date;
+
+  // New fields for multi-exam type support
+  @Prop({ type: String, enum: Object.values(ExamCategory), default: ExamCategory.GENERAL_ASSESSMENT })
+  category: ExamCategory;
+
+  @Prop({ type: String, enum: Object.values(ExamAccessMode), default: ExamAccessMode.ENROLLMENT_BASED })
+  accessMode: ExamAccessMode;
+
+  // Invitation-specific settings
+  @Prop({ type: Object })
+  invitationSettings?: {
+    linkValidityDays: number;      // Default: 7 days
+    allowMultipleAccess: boolean;  // Can open link multiple times before starting
+    maxAccessCount: number;        // Max times link can be accessed (default: 10)
+    autoExpireOnSubmit: boolean;   // Expire invitation after exam submission
+    sendReminderEmails: boolean;   // Send reminder before expiry
+    reminderBeforeDays: number;    // Days before expiry to send reminder (default: 1)
+  };
+
+  // Result visibility for recruitment exams
+  @Prop({ type: Object })
+  recruitmentResultSettings?: {
+    showScoreToCandidate: boolean;      // Whether candidate sees their score
+    showRankToCandidate: boolean;       // Whether candidate sees their rank
+    showOnlyConfirmation: boolean;      // Only show "submitted successfully"
+    candidateResultMessage: string;     // Custom message after submission
+    recruiterCanExport: boolean;        // Allow RECRUITER to export results
+  };
 }
 
 export const ExamSchema = SchemaFactory.createForClass(Exam);

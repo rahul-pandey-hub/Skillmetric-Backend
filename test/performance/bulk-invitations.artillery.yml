@@ -1,0 +1,158 @@
+config:
+  target: "{{ $processEnvironment.API_URL | http://localhost:3000 }}"
+  phases:
+    - duration: 60
+      arrivalRate: 5
+      name: "Warm-up Phase"
+    - duration: 300
+      arrivalRate: 20
+      rampTo: 50
+      name: "Ramp-up to Peak Load"
+    - duration: 600
+      arrivalRate: 50
+      name: "Sustained Peak Load - 50 req/s"
+    - duration: 180
+      arrivalRate: 50
+      rampTo: 5
+      name: "Ramp-down"
+  processor: "./artillery-processor.js"
+  plugins:
+    expect: {}
+    metrics-by-endpoint: {}
+  http:
+    timeout: 30
+    maxSockets: 500
+  environments:
+    production:
+      target: "https://api.skillmetric.com"
+      phases:
+        - duration: 120
+          arrivalRate: 10
+        - duration: 300
+          arrivalRate: 30
+
+scenarios:
+  - name: "Send Bulk Invitations (Recruiter)"
+    weight: 40
+    flow:
+      # Login as recruiter
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "recruiter{{ $randomNumber(1, 100) }}@techcorp.com"
+            password: "testPassword123"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+          expect:
+            - statusCode: 200
+
+      # Send invitations to 50 candidates
+      - post:
+          url: "/api/exams/{{ examId }}/invitations"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            candidates:
+              - name: "{{ $randomString() }} Candidate"
+                email: "candidate{{ $randomNumber(1, 100000) }}@example.com"
+                phone: "+1{{ $randomNumber(1000000000, 9999999999) }}"
+              - name: "{{ $randomString() }} Applicant"
+                email: "applicant{{ $randomNumber(1, 100000) }}@example.com"
+                phone: "+1{{ $randomNumber(1000000000, 9999999999) }}"
+              - name: "{{ $randomString() }} Test"
+                email: "test{{ $randomNumber(1, 100000) }}@example.com"
+              - name: "{{ $randomString() }} User"
+                email: "user{{ $randomNumber(1, 100000) }}@example.com"
+                phone: "+1{{ $randomNumber(1000000000, 9999999999) }}"
+              - name: "{{ $randomString() }} Person"
+                email: "person{{ $randomNumber(1, 100000) }}@example.com"
+            invitationNote: "Please complete this technical assessment at your earliest convenience."
+            validityDays: 7
+          expect:
+            - statusCode: 201
+            - contentType: json
+            - hasProperty: "summary.sent"
+          capture:
+            - json: "$.summary.sent"
+              as: "sentCount"
+
+      # Wait between requests (simulate realistic behavior)
+      - think: 5
+
+  - name: "Send Bulk Invitations (Org Admin)"
+    weight: 60
+    flow:
+      # Login as org admin
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "admin{{ $randomNumber(1, 50) }}@organization.com"
+            password: "adminPassword123"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+          expect:
+            - statusCode: 200
+
+      # Send invitations to 100 candidates
+      - post:
+          url: "/api/exams/{{ examId }}/invitations"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          beforeRequest: "generateCandidates"
+          json:
+            candidates: "{{ candidates }}"
+            invitationNote: "You are invited to participate in this assessment."
+            validityDays: 14
+          expect:
+            - statusCode: 201
+            - hasProperty: "summary.sent"
+            - hasProperty: "details"
+
+      - think: 3
+
+      # Check recruitment results
+      - get:
+          url: "/api/exams/{{ examId }}/recruitment-results"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+            - contentType: json
+
+  - name: "Resend Failed Invitations"
+    weight: 10
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "recruiter1@techcorp.com"
+            password: "testPassword123"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+
+      # Get failed invitations
+      - get:
+          url: "/api/exams/{{ examId }}/invitations?status=FAILED"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          capture:
+            - json: "$[0].candidateEmail"
+              as: "failedEmail"
+
+      # Resend to failed email
+      - post:
+          url: "/api/exams/{{ examId }}/invitations"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            candidates:
+              - email: "{{ failedEmail }}"
+                name: "Resend Candidate"
+            validityDays: 7
+
+after:
+  flow:
+    - log: "Performance test completed. Check Artillery HTML report for results."

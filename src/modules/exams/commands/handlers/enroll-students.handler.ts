@@ -34,6 +34,13 @@ export class EnrollStudentsHandler
       throw new NotFoundException('Exam not found');
     }
 
+    // Check if exam allows enrollment-based access
+    if (exam.accessMode === 'INVITATION_BASED') {
+      throw new BadRequestException(
+        'This exam uses invitation-based access only. Please send invitations instead of enrolling students.',
+      );
+    }
+
     // Check if user is the creator
     if (exam.createdBy.toString() !== userId) {
       throw new ForbiddenException(

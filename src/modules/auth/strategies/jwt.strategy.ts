@@ -4,7 +4,19 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
+import { Request } from 'express';
 import { User } from '../../users/schemas/user.schema';
+
+/**
+ * Custom JWT extractor that checks both cookies and Authorization header
+ * Priority: Cookie-based token (more secure) -> Authorization header (backward compatible)
+ */
+const cookieExtractor = (req: Request): string | null => {
+  if (req && req.cookies) {
+    return req.cookies['accessToken'] || null;
+  }
+  return null;
+};
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -13,13 +25,30 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private configService: ConfigService,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      // Support both cookie-based and header-based JWT extraction
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        cookieExtractor, // Try cookie first (more secure)
+        ExtractJwt.fromAuthHeaderAsBearerToken(), // Fallback to Authorization header
+      ]),
       ignoreExpiration: false,
       secretOrKey: configService.get<string>('JWT_SECRET') || 'default-secret',
     });
   }
 
   async validate(payload: any) {
+    // Handle invitation-based JWT (temporary tokens for guest access)
+    if (payload.type === 'INVITATION') {
+      return {
+        type: 'INVITATION',
+        invitationId: payload.invitationId,
+        examId: payload.examId,
+        email: payload.candidateEmail,
+        candidateName: payload.candidateName,
+        isGuest: true,
+      };
+    }
+
+    // Handle regular user JWT
     const user = await this.userModel.findById(payload.sub || payload.userId);
     if (!user || !user.isActive) {
       throw new UnauthorizedException();

@@ -2,13 +2,16 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
 export enum UserRole {
-  SUPER_ADMIN = 'SUPER_ADMIN',
-  ORG_ADMIN = 'ORG_ADMIN',
-  RECRUITER = 'RECRUITER',
-  INSTRUCTOR = 'INSTRUCTOR',
-  ADMIN = 'ADMIN',
-  STUDENT = 'STUDENT',
-  PROCTOR = 'PROCTOR',
+  SUPER_ADMIN = 'SUPER_ADMIN',  // Creates organizations, assigns Org Admins
+  ORG_ADMIN = 'ORG_ADMIN',      // Manages exams, candidates, recruiters
+  CANDIDATE = 'CANDIDATE',       // Takes exams (replaces STUDENT)
+  RECRUITER = 'RECRUITER',       // Limited: View recruitment exam results only
+
+  // Deprecated roles (keep for migration, will be migrated)
+  INSTRUCTOR = 'INSTRUCTOR',     // @deprecated - migrate to ORG_ADMIN
+  ADMIN = 'ADMIN',               // @deprecated - migrate to ORG_ADMIN
+  STUDENT = 'STUDENT',           // @deprecated - migrate to CANDIDATE
+  PROCTOR = 'PROCTOR',           // @deprecated - migrate to ORG_ADMIN
 }
 
 export enum Gender {
@@ -207,11 +210,23 @@ export class User extends Document {
   @Prop({ required: true })
   password: string;
 
-  @Prop({ type: String, enum: UserRole, default: UserRole.STUDENT })
+  @Prop({ type: String, enum: UserRole, default: UserRole.CANDIDATE })
   role: UserRole;
 
   @Prop({ type: [Types.ObjectId], ref: 'Organization', default: [] })
   organizationIds: Types.ObjectId[];
+
+  @Prop({ type: String, enum: ['EMPLOYEE', 'EXTERNAL'] })
+  candidateType?: 'EMPLOYEE' | 'EXTERNAL'; // For Type 1 vs Type 3 differentiation
+
+  @Prop({ type: [Object], default: [] })
+  roleHistory?: Array<{
+    previousRole: UserRole;
+    newRole: UserRole;
+    changedAt: Date;
+    changedBy: Types.ObjectId;
+    reason?: string;
+  }>;
 
   @Prop({ default: true })
   isActive: boolean;
@@ -268,9 +283,10 @@ UserSchema.pre('save', function (next) {
     return next();
   }
 
-  // All other roles MUST have at least one organizationId (except STUDENT during enrollment)
+  // All other roles MUST have at least one organizationId (except CANDIDATE/STUDENT during enrollment)
   if (
-    user.role !== UserRole.STUDENT &&
+    user.role !== UserRole.CANDIDATE &&
+    user.role !== UserRole.STUDENT && // Keep for backward compatibility during migration
     (!user.organizationIds || user.organizationIds.length === 0)
   ) {
     return next(

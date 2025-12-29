@@ -1,7 +1,7 @@
-import { IsString, IsNotEmpty, IsNumber, IsOptional, IsEnum, IsBoolean, IsDate, IsArray, ValidateNested, Min } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsOptional, IsEnum, IsBoolean, IsDate, IsArray, ValidateNested, Min, IsObject } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ExamStatus } from '../schemas/exam.schema';
+import { ExamStatus, ExamCategory, ExamAccessMode } from '../schemas/exam.schema';
 
 class ProctoringSettingsDto {
   @ApiProperty({ example: true })
@@ -170,4 +170,37 @@ export class CreateExamDto {
   @ValidateNested()
   @Type(() => SettingsDto)
   settings: SettingsDto;
+
+  @ApiPropertyOptional({ enum: ExamCategory, example: ExamCategory.GENERAL_ASSESSMENT })
+  @IsOptional()
+  @IsEnum(ExamCategory)
+  category?: ExamCategory;
+
+  @ApiPropertyOptional({ enum: ExamAccessMode, example: ExamAccessMode.ENROLLMENT_BASED })
+  @IsOptional()
+  @IsEnum(ExamAccessMode)
+  accessMode?: ExamAccessMode;
+
+  @ApiPropertyOptional({ example: { linkValidityDays: 7, allowMultipleAccess: true, maxAccessCount: 10, autoExpireOnSubmit: true, sendReminderEmails: false, reminderBeforeDays: 1 } })
+  @IsOptional()
+  @IsObject()
+  invitationSettings?: {
+    linkValidityDays: number;
+    allowMultipleAccess: boolean;
+    maxAccessCount: number;
+    autoExpireOnSubmit: boolean;
+    sendReminderEmails: boolean;
+    reminderBeforeDays: number;
+  };
+
+  @ApiPropertyOptional({ example: { showScoreToCandidate: false, showRankToCandidate: false, showOnlyConfirmation: true, candidateResultMessage: 'Thank you for completing the assessment', recruiterCanExport: true } })
+  @IsOptional()
+  @IsObject()
+  recruitmentResultSettings?: {
+    showScoreToCandidate: boolean;
+    showRankToCandidate: boolean;
+    showOnlyConfirmation: boolean;
+    candidateResultMessage?: string;
+    recruiterCanExport: boolean;
+  };
 }

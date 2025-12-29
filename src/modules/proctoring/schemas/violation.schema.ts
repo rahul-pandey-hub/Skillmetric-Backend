@@ -25,8 +25,11 @@ export class Violation extends Document {
   @Prop({ type: Types.ObjectId, ref: 'ExamSession', required: true })
   session: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  student: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'User', required: false })
+  student: Types.ObjectId; // For enrolled students
+
+  @Prop({ type: Types.ObjectId, ref: 'ExamInvitation', required: false })
+  invitation: Types.ObjectId; // For invitation-based (guest) candidates
 
   @Prop({ type: Types.ObjectId, ref: 'Exam', required: true })
   exam: Types.ObjectId;

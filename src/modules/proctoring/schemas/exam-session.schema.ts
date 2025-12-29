@@ -7,6 +7,7 @@ export enum SessionStatus {
   COMPLETED = 'COMPLETED',
   AUTO_SUBMITTED = 'AUTO_SUBMITTED',
   ABANDONED = 'ABANDONED',
+  TIMED_OUT = 'TIMED_OUT',
 }
 
 @Schema({ timestamps: true })
@@ -17,11 +18,25 @@ export class ExamSession extends Document {
   @Prop({ type: Types.ObjectId, ref: 'Exam', required: true })
   examId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  studentId: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'User', required: false })
+  studentId?: Types.ObjectId; // Optional: Required for enrollment, null for invitation
 
   @Prop({ type: String, enum: SessionStatus, default: SessionStatus.IN_PROGRESS })
   status: string;
+
+  // New fields for invitation-based access
+  @Prop({ type: String, enum: ['ENROLLMENT', 'INVITATION'] })
+  accessSource?: string; // How user accessed the exam
+
+  @Prop({ type: Types.ObjectId, ref: 'ExamInvitation' })
+  invitationId?: Types.ObjectId; // Link to ExamInvitation if accessed via invitation
+
+  @Prop({ type: Object })
+  guestCandidateInfo?: {
+    email: string;
+    name: string;
+    phone?: string;
+  }; // For invitation-based access without User account
 
   @Prop({ default: 0 })
   warningCount: number;
@@ -75,3 +90,6 @@ ExamSessionSchema.index({ sessionCode: 1 });
 ExamSessionSchema.index({ examId: 1, studentId: 1 });
 ExamSessionSchema.index({ status: 1, startTime: -1 });
 ExamSessionSchema.index({ warningCount: 1 });
+ExamSessionSchema.index({ invitationId: 1 });
+ExamSessionSchema.index({ accessSource: 1 });
+ExamSessionSchema.index({ 'guestCandidateInfo.email': 1 });

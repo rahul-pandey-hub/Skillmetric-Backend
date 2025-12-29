@@ -6,9 +6,12 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CqrsModule } from '@nestjs/cqrs';
 import { AuthController } from './controllers/auth.controller';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { ExamInvitation, ExamInvitationSchema } from '../exams/schemas/exam-invitation.schema';
+import { ExamSession, ExamSessionSchema } from '../proctoring/schemas/exam-session.schema';
 import { LoginHandler } from './commands/handlers/login.handler';
 import { RegisterHandler } from './commands/handlers/register.handler';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { InvitationJwtStrategy } from './strategies/invitation-jwt.strategy';
 
 const CommandHandlers = [LoginHandler, RegisterHandler];
 
@@ -26,10 +29,14 @@ const CommandHandlers = [LoginHandler, RegisterHandler];
       }),
       inject: [ConfigService],
     }),
-    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    MongooseModule.forFeature([
+      { name: User.name, schema: UserSchema },
+      { name: ExamInvitation.name, schema: ExamInvitationSchema },
+      { name: ExamSession.name, schema: ExamSessionSchema },
+    ]),
   ],
   controllers: [AuthController],
-  providers: [...CommandHandlers, JwtStrategy],
+  providers: [...CommandHandlers, JwtStrategy, InvitationJwtStrategy],
   exports: [JwtStrategy, PassportModule],
 })
 export class AuthModule {}

@@ -366,7 +366,6 @@ export class StudentExamsController {
     @Request() req,
   ) {
     const { sessionId, answers } = submitData;
-    const studentId = req.user.id;
 
     // Find session
     const session = await this.examSessionModel.findById(sessionId).exec();
@@ -374,8 +373,38 @@ export class StudentExamsController {
       throw new NotFoundException('Exam session not found');
     }
 
-    // Verify ownership
-    if (session.studentId.toString() !== studentId) {
+    // Verify ownership - check both enrollment and invitation-based access
+    const studentId = req.user?.id;
+    const invitationId = req.user?.invitationId;
+
+    console.log('Submit validation:', {
+      sessionId,
+      sessionStudentId: session.studentId?.toString(),
+      sessionInvitationId: session.invitationId?.toString(),
+      userStudentId: studentId,
+      userInvitationId: invitationId,
+      userType: req.user?.type,
+    });
+
+    let isValidSession = false;
+
+    // Check if it's an enrollment-based session
+    if (session.studentId && studentId && session.studentId.toString() === studentId) {
+      isValidSession = true;
+    }
+
+    // Check if it's an invitation-based session
+    if (session.invitationId && invitationId && session.invitationId.toString() === invitationId) {
+      isValidSession = true;
+    }
+
+    if (!isValidSession) {
+      console.error('Session validation failed:', {
+        hasSessionStudentId: !!session.studentId,
+        hasSessionInvitationId: !!session.invitationId,
+        hasUserStudentId: !!studentId,
+        hasUserInvitationId: !!invitationId,
+      });
       throw new BadRequestException('Invalid session');
     }
 
@@ -427,6 +456,45 @@ export class StudentExamsController {
     session.score = totalScore;
     await session.save();
 
+    // Handle invitation-based access
+    if (session.accessSource === 'INVITATION' && session.invitationId) {
+      // Update invitation status to COMPLETED
+      const InvitationModel = this.examSessionModel.db.model('ExamInvitation');
+      const invitation = await InvitationModel.findById(session.invitationId);
+
+      if (invitation) {
+        const autoExpire = exam.invitationSettings?.autoExpireOnSubmit || false;
+        invitation.status = autoExpire ? 'EXPIRED' : 'COMPLETED';
+        invitation.examCompletedAt = new Date();
+        await invitation.save();
+      }
+
+      // Determine result visibility for recruitment exams
+      const showScore = exam.recruitmentResultSettings?.showScoreToCandidate !== false;
+      const showRank = exam.recruitmentResultSettings?.showRankToCandidate !== false;
+      const showOnlyConfirmation = exam.recruitmentResultSettings?.showOnlyConfirmation || false;
+
+      if (showOnlyConfirmation) {
+        return {
+          submitted: true,
+          sessionId: session._id,
+          message: exam.recruitmentResultSettings?.candidateResultMessage ||
+            'Thank you for completing the assessment. Your submission has been recorded.',
+        };
+      }
+
+      return {
+        submitted: true,
+        sessionId: session._id,
+        score: showScore ? totalScore : undefined,
+        totalMarks: showScore ? exam.grading.totalMarks : undefined,
+        passingMarks: showScore ? exam.grading.passingMarks : undefined,
+        passed: showScore ? totalScore >= exam.grading.passingMarks : undefined,
+        message: exam.recruitmentResultSettings?.candidateResultMessage,
+      };
+    }
+
+    // Regular enrollment-based response
     return {
       submitted: true,
       sessionId: session._id,
@@ -457,7 +525,8 @@ export class StudentExamsController {
       throw new NotFoundException('Session not found');
     }
 
-    if (session.studentId.toString() !== studentId) {
+    // Only validate studentId for enrollment-based exams (not invitation-based)
+    if (session.studentId && session.studentId.toString() !== studentId) {
       throw new BadRequestException('Invalid session');
     }
 

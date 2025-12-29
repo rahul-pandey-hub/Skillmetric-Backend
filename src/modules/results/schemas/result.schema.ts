@@ -189,11 +189,28 @@ export class Result extends Document {
   @Prop({ type: Types.ObjectId, ref: 'Exam', required: true })
   exam: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  student: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'User', required: false })
+  student?: Types.ObjectId; // Optional: Required for enrollment, null for invitation
 
   @Prop({ type: Types.ObjectId, ref: 'ExamSession', required: true })
   session: Types.ObjectId;
+
+  // New fields for invitation-based access
+  @Prop({ type: Types.ObjectId, ref: 'ExamInvitation' })
+  invitationId?: Types.ObjectId; // Reference to ExamInvitation for recruitment exams
+
+  @Prop({ type: Object })
+  guestCandidateInfo?: {
+    email: string;
+    name: string;
+    phone?: string;
+  }; // Denormalized guest candidate data for invitation-based access
+
+  @Prop({ type: Boolean, default: true })
+  visibleToCandidate: boolean; // Control whether candidate can see this result
+
+  @Prop({ type: Boolean, default: false })
+  isRecruitmentExam: boolean; // Flag to indicate recruitment exam result
 
   @Prop({ type: Number, default: 1 })
   attemptNumber: number;
@@ -221,12 +238,23 @@ export class Result extends Document {
   @Prop({ type: Ranking, default: () => ({}) })
   ranking: Ranking;
 
-  // Shortlisting decision
+  // Shortlisting decision (legacy field)
   @Prop({ type: Boolean, default: false })
   shortlisted: boolean;
 
   @Prop()
   shortlistingReason?: string;
+
+  // New detailed shortlisting decision (for recruitment exams)
+  @Prop({ type: Object })
+  shortlistingDecision?: {
+    isShortlisted: boolean;
+    shortlistedAt?: Date;
+    shortlistedBy?: Types.ObjectId;
+    rejectedAt?: Date;
+    rejectedBy?: Types.ObjectId;
+    comments?: string;
+  };
 
   // Flags
   @Prop({ type: Flags, default: () => ({}) })
@@ -342,10 +370,35 @@ export class Result extends Document {
 export const ResultSchema = SchemaFactory.createForClass(Result);
 
 // Indexes
-ResultSchema.index({ exam: 1, student: 1, attemptNumber: 1 }, { unique: true });
+// Updated indexes to support both enrollment and invitation-based results
+// Unique constraint for enrollment-based results (where student exists)
+ResultSchema.index(
+  { exam: 1, student: 1, attemptNumber: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { student: { $exists: true, $ne: null } },
+  }
+);
+
+// Unique constraint for invitation-based results (where invitationId exists)
+ResultSchema.index(
+  { exam: 1, invitationId: 1, attemptNumber: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { invitationId: { $exists: true, $ne: null } },
+  }
+);
+
+// Existing indexes
 ResultSchema.index({ exam: 1, 'scoring.totalScore': -1 });
 ResultSchema.index({ exam: 1, 'scoring.percentileRank': -1 });
 ResultSchema.index({ student: 1, status: 1 });
 ResultSchema.index({ exam: 1, shortlisted: 1 });
 ResultSchema.index({ exam: 1, 'ranking.rank': 1 });
 ResultSchema.index({ status: 1, exam: 1 });
+
+// New indexes for invitation-based results
+ResultSchema.index({ invitationId: 1 });
+ResultSchema.index({ 'guestCandidateInfo.email': 1 });
+ResultSchema.index({ isRecruitmentExam: 1, exam: 1 });
+ResultSchema.index({ exam: 1, 'shortlistingDecision.isShortlisted': 1 });
