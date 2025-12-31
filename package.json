@@ -25,6 +25,7 @@
     "migration:exam-fields": "ts-node -r tsconfig-paths/register src/scripts/migrate-exam-fields.ts"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@nestjs/bull": "^11.0.4",
     "@nestjs/common": "^10.2.10",
     "@nestjs/config": "^3.1.1",

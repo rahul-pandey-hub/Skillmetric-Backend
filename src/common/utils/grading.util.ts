@@ -33,6 +33,7 @@ export class GradingUtil {
 
     switch (questionType) {
       case QuestionType.MULTIPLE_CHOICE:
+      case QuestionType.MULTIPLE_RESPONSE:
         return this.gradeMultipleChoice(
           correctAnswer,
           studentAnswer,
@@ -79,14 +80,18 @@ export class GradingUtil {
 
   /**
    * Grade multiple choice question
+   * Supports both single answer (string) and multiple answers (array)
    */
   private static gradeMultipleChoice(
-    correctAnswer: string,
-    studentAnswer: string,
+    correctAnswer: string | string[],
+    studentAnswer: string | string[],
     marks: number,
     negativeMarks: number,
   ): QuestionGradingResult {
-    if (!studentAnswer || studentAnswer.trim() === '') {
+    // Check if answer is provided
+    if (!studentAnswer ||
+        (Array.isArray(studentAnswer) && studentAnswer.length === 0) ||
+        (typeof studentAnswer === 'string' && studentAnswer.trim() === '')) {
       return {
         isCorrect: false,
         marksObtained: 0,
@@ -95,7 +100,30 @@ export class GradingUtil {
       };
     }
 
-    const isCorrect = correctAnswer === studentAnswer;
+    // Handle array answers (multiple selections)
+    if (Array.isArray(correctAnswer) && Array.isArray(studentAnswer)) {
+      // Check if arrays are equal (same length and all elements match)
+      const isCorrect =
+        correctAnswer.length === studentAnswer.length &&
+        correctAnswer.every((ans) => studentAnswer.includes(ans)) &&
+        studentAnswer.every((ans) => correctAnswer.includes(ans));
+
+      return {
+        isCorrect,
+        marksObtained: isCorrect ? marks : -negativeMarks,
+        requiresManualGrading: false,
+        feedback: isCorrect ? 'Correct answer' : 'Incorrect answer',
+      };
+    }
+
+    // Handle array vs string mismatch - convert to array
+    let correctAnswerArr = Array.isArray(correctAnswer) ? correctAnswer : [correctAnswer];
+    let studentAnswerArr = Array.isArray(studentAnswer) ? studentAnswer : [studentAnswer];
+
+    const isCorrect =
+      correctAnswerArr.length === studentAnswerArr.length &&
+      correctAnswerArr.every((ans) => studentAnswerArr.includes(ans)) &&
+      studentAnswerArr.every((ans) => correctAnswerArr.includes(ans));
 
     return {
       isCorrect,

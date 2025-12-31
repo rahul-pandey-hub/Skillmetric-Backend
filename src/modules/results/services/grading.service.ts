@@ -55,7 +55,8 @@ export class GradingService {
     const answersMap = new Map();
     if (session.answers && Array.isArray(session.answers)) {
       session.answers.forEach((ans: any) => {
-        answersMap.set(ans.questionId?.toString() || ans.questionId, ans.answer);
+        // Store the full answer object to preserve all answer types
+        answersMap.set(ans.questionId?.toString() || ans.questionId, ans);
       });
     }
 
@@ -64,8 +65,20 @@ export class GradingService {
     let totalPossibleMarks = 0;
 
     for (const question of questions) {
-      const studentAnswer = answersMap.get(question._id.toString());
+      const answerObj = answersMap.get(question._id.toString());
       totalPossibleMarks += question.marks;
+
+      // Extract the actual answer based on question type
+      let studentAnswer;
+      if (answerObj) {
+        if (question.type === 'MULTIPLE_CHOICE' || question.type === 'MULTIPLE_RESPONSE') {
+          studentAnswer = answerObj.selectedOptions;
+        } else if (question.type === 'TRUE_FALSE') {
+          studentAnswer = answerObj.selectedOption;
+        } else {
+          studentAnswer = answerObj.answer;
+        }
+      }
 
       const gradingResult = GradingUtil.gradeQuestion({
         questionType: question.type,
@@ -294,10 +307,6 @@ export class GradingService {
             result._id.toString(),
           );
         } catch (error) {
-          console.error(
-            `Failed to generate certificate for result ${result._id}:`,
-            error,
-          );
           // Continue even if certificate generation fails
         }
       }
@@ -337,8 +346,6 @@ export class GradingService {
 
         emailsQueued++;
       } catch (error) {
-        console.error(`Failed to queue email for ${result.student}:`, error);
-
         // Track email error
         if (!result.emailTracking) {
           result.emailTracking = {

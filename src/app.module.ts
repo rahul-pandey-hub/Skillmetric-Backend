@@ -26,6 +26,7 @@ import { SystemConfigModule } from './modules/system-config/system-config.module
 import { OrgAdminModule } from './modules/org-admin/org-admin.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { AIQuestionsModule } from './modules/ai-questions/ai-questions.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { AdminModule } from './modules/admin/admin.module';
     OrgAdminModule,
     AdminModule,
     MonitoringModule,
+    AIQuestionsModule,
     StudentsModule,
     NotificationsModule,
     RabbitMQModule,

@@ -23,6 +23,7 @@ import { Result } from '../../results/schemas/result.schema';
 import { ExamSession } from '../../proctoring/schemas/exam-session.schema';
 import { Violation } from '../../proctoring/schemas/violation.schema';
 import { User } from '../../users/schemas/user.schema';
+import { Question } from '../../questions/schemas/question.schema';
 
 @ApiTags('exams')
 @Controller('exams')
@@ -31,6 +32,7 @@ export class ExamsController {
   constructor(
     private readonly commandBus: CommandBus,
     @InjectModel(Exam.name) private examModel: Model<Exam>,
+    @InjectModel(Question.name) private questionModel: Model<Question>,
     @InjectModel(Result.name) private resultModel: Model<Result>,
     @InjectModel(ExamSession.name) private sessionModel: Model<ExamSession>,
     @InjectModel(Violation.name) private violationModel: Model<Violation>,
@@ -98,12 +100,21 @@ export class ExamsController {
 
     const exam = await this.examModel
       .findById(id)
-      .populate('questions')
       .populate('createdBy', 'name email')
       .exec();
 
     if (!exam) {
       throw new NotFoundException('Exam not found');
+    }
+
+    // Manually populate questions since .populate() isn't working
+    if (exam.questions && exam.questions.length > 0) {
+      const populatedQuestions = await this.questionModel
+        .find({ _id: { $in: exam.questions } })
+        .exec();
+
+      // Replace the question IDs with actual question objects
+      (exam as any).questions = populatedQuestions;
     }
 
     return exam;

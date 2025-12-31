@@ -65,9 +65,6 @@ export class StudentExamsController {
   async getStudentExams(@Request() req) {
     const studentId = req.user.id;
 
-    console.log('Getting exams for student:', studentId);
-    console.log('Student ID type:', typeof studentId);
-
     // Find all exams where student is enrolled
     // Convert studentId to ObjectId and use $in operator
     const exams = await this.examModel
@@ -77,18 +74,6 @@ export class StudentExamsController {
       .select('title code description duration status schedule proctoringSettings grading settings enrolledStudents')
       .sort({ 'schedule.startDate': -1 })
       .exec();
-
-    console.log('Found exams:', exams.length);
-
-    if (exams.length === 0) {
-      // Try alternate query for debugging
-      const allExams = await this.examModel.find().limit(5).exec();
-      console.log('Sample exam enrolledStudents:', allExams.map(e => ({
-        title: e.title,
-        enrolledStudents: e.enrolledStudents,
-        types: e.enrolledStudents.map(id => typeof id),
-      })));
-    }
 
     // For each exam, check if student has already taken it
     const examsWithStatus = await Promise.all(
@@ -275,10 +260,8 @@ export class StudentExamsController {
         if (id && id._id && typeof id._id === 'object') {
           return true;
         }
-        console.error('Invalid question ID in exam:', id);
         return false;
       } catch (err) {
-        console.error('Error validating question ID:', id, err);
         return false;
       }
     });
@@ -377,15 +360,6 @@ export class StudentExamsController {
     const studentId = req.user?.id;
     const invitationId = req.user?.invitationId;
 
-    console.log('Submit validation:', {
-      sessionId,
-      sessionStudentId: session.studentId?.toString(),
-      sessionInvitationId: session.invitationId?.toString(),
-      userStudentId: studentId,
-      userInvitationId: invitationId,
-      userType: req.user?.type,
-    });
-
     let isValidSession = false;
 
     // Check if it's an enrollment-based session
@@ -399,12 +373,6 @@ export class StudentExamsController {
     }
 
     if (!isValidSession) {
-      console.error('Session validation failed:', {
-        hasSessionStudentId: !!session.studentId,
-        hasSessionInvitationId: !!session.invitationId,
-        hasUserStudentId: !!studentId,
-        hasUserInvitationId: !!invitationId,
-      });
       throw new BadRequestException('Invalid session');
     }
 
@@ -433,13 +401,27 @@ export class StudentExamsController {
       if (question.type === 'TRUE_FALSE') {
         isCorrect = answer.selectedOption === question.correctAnswer;
         marks = isCorrect ? question.marks : (exam.grading.negativeMarking ? -(exam.grading.negativeMarkValue || 0) : 0);
-      } else if (question.type === 'MULTIPLE_CHOICE') {
-        const correctAnswers = question.correctAnswer as string[];
+      } else if (question.type === 'MULTIPLE_CHOICE' || question.type === 'MULTIPLE_RESPONSE') {
+        // Handle both single and multiple correct answers
+        const correctAnswers = Array.isArray(question.correctAnswer)
+          ? question.correctAnswer
+          : [question.correctAnswer];
         const selectedAnswers = answer.selectedOptions || [];
+
         isCorrect =
           correctAnswers.length === selectedAnswers.length &&
           correctAnswers.every((ans) => selectedAnswers.includes(ans));
         marks = isCorrect ? question.marks : (exam.grading.negativeMarking ? -(exam.grading.negativeMarkValue || 0) : 0);
+      } else if (question.type === 'SHORT_ANSWER' || question.type === 'FILL_BLANK') {
+        // For text-based answers, compare trimmed lowercase strings
+        const correctAnswer = (question.correctAnswer || '').toString().trim().toLowerCase();
+        const studentAnswer = (answer.answer || '').toString().trim().toLowerCase();
+        isCorrect = correctAnswer === studentAnswer;
+        marks = isCorrect ? question.marks : 0;
+      } else if (question.type === 'ESSAY' || question.type === 'SUBJECTIVE' || question.type === 'CODING') {
+        // These require manual grading
+        marks = 0;
+        isCorrect = false;
       }
 
       totalScore += marks;
@@ -572,27 +554,30 @@ export class StudentExamsController {
       .exec();
 
     // Transform results to include exam details
-    const transformedResults = results.map(result => ({
-      _id: result._id,
-      exam: {
-        _id: (result.exam as any)._id,
-        title: (result.exam as any).title,
-        code: (result.exam as any).code,
-        description: (result.exam as any).description,
-        totalMarks: (result.exam as any).grading?.totalMarks,
-        passingMarks: (result.exam as any).grading?.passingMarks,
-        schedule: (result.exam as any).schedule,
-      },
-      status: result.status,
-      score: result.score,
-      analysis: result.analysis,
-      rank: result.rank,
-      percentile: result.percentile,
-      proctoringReport: result.proctoringReport,
-      submittedAt: result.submittedAt,
-      publishedAt: result.publishedAt,
-      createdAt: (result as any).createdAt,
-    }));
+    // Filter out results where exam has been deleted (null)
+    const transformedResults = results
+      .filter(result => result.exam != null)
+      .map(result => ({
+        _id: result._id,
+        exam: {
+          _id: (result.exam as any)._id,
+          title: (result.exam as any).title,
+          code: (result.exam as any).code,
+          description: (result.exam as any).description,
+          totalMarks: (result.exam as any).grading?.totalMarks,
+          passingMarks: (result.exam as any).grading?.passingMarks,
+          schedule: (result.exam as any).schedule,
+        },
+        status: result.status,
+        score: result.score,
+        analysis: result.analysis,
+        rank: result.rank,
+        percentile: result.percentile,
+        proctoringReport: result.proctoringReport,
+        submittedAt: result.submittedAt,
+        publishedAt: result.publishedAt,
+        createdAt: (result as any).createdAt,
+      }));
 
     return {
       data: transformedResults,
