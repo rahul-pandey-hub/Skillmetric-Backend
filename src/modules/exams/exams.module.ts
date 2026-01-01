@@ -18,7 +18,7 @@ import { RecruitmentResultsController } from './controllers/recruitment-results.
 import { CreateExamHandler } from './commands/handlers/create-exam.handler';
 import { AddQuestionsToExamHandler } from './commands/handlers/add-questions-to-exam.handler';
 import { RemoveQuestionsFromExamHandler } from './commands/handlers/remove-questions-from-exam.handler';
-import { EnrollStudentsHandler } from './commands/handlers/enroll-students.handler';
+import { EnrollCandidatesHandler } from './commands/handlers/enroll-candidates.handler';
 import { SendInvitationsHandler } from './commands/handlers/send-invitations.handler';
 import { InvitationTokenService } from './services/invitation-token.service';
 import { ExpireInvitationsJob } from './jobs/expire-invitations.job';
@@ -29,7 +29,7 @@ const CommandHandlers = [
   CreateExamHandler,
   AddQuestionsToExamHandler,
   RemoveQuestionsFromExamHandler,
-  EnrollStudentsHandler,
+  EnrollCandidatesHandler,
   SendInvitationsHandler,
 ];
 

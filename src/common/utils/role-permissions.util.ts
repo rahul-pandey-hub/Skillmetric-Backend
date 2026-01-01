@@ -28,9 +28,9 @@ export class RolePermissions {
   }
 
   /**
-   * Check if a role can enroll students
+   * Check if a role can enroll candidates
    */
-  static canEnrollStudents(role: UserRole): boolean {
+  static canEnrollCandidates(role: UserRole): boolean {
     return role === UserRole.ORG_ADMIN;
   }
 
@@ -148,28 +148,6 @@ export class RolePermissions {
   }
 
   /**
-   * Map deprecated role to new role
-   */
-  static mapDeprecatedRole(role: string): UserRole {
-    const roleMap: Record<string, UserRole> = {
-      INSTRUCTOR: UserRole.ORG_ADMIN,
-      ADMIN: UserRole.ORG_ADMIN,
-      STUDENT: UserRole.CANDIDATE,
-      PROCTOR: UserRole.ORG_ADMIN,
-      RECRUITER: UserRole.RECRUITER,
-    };
-
-    return roleMap[role] || (role as UserRole);
-  }
-
-  /**
-   * Check if a role is deprecated
-   */
-  static isDeprecatedRole(role: string): boolean {
-    return ['INSTRUCTOR', 'ADMIN', 'STUDENT', 'PROCTOR'].includes(role);
-  }
-
-  /**
    * Get role hierarchy level (higher number = more permissions)
    */
   static getRoleLevel(role: UserRole): number {
@@ -178,11 +156,6 @@ export class RolePermissions {
       [UserRole.ORG_ADMIN]: 50,
       [UserRole.RECRUITER]: 30,
       [UserRole.CANDIDATE]: 10,
-      // Deprecated roles (for backward compatibility)
-      [UserRole.INSTRUCTOR]: 50,
-      [UserRole.ADMIN]: 50,
-      [UserRole.PROCTOR]: 50,
-      [UserRole.STUDENT]: 10,
     };
 
     return levels[role] || 0;
@@ -204,10 +177,6 @@ export class RolePermissions {
       [UserRole.ORG_ADMIN]: 'Organization Administrator',
       [UserRole.RECRUITER]: 'Recruiter',
       [UserRole.CANDIDATE]: 'Candidate',
-      [UserRole.INSTRUCTOR]: 'Instructor (Deprecated)',
-      [UserRole.ADMIN]: 'Admin (Deprecated)',
-      [UserRole.PROCTOR]: 'Proctor (Deprecated)',
-      [UserRole.STUDENT]: 'Student (Deprecated)',
     };
 
     return displayNames[role] || role;

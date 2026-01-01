@@ -190,7 +190,7 @@ export class ShortlistingService {
         shortlisted: true,
         status: { $in: ['EVALUATED', 'PUBLISHED'] },
       })
-      .populate('student', 'name email profile')
+      .populate('candidate', 'name email profile')
       .sort({ 'scoring.totalScore': -1 });
 
     return results;

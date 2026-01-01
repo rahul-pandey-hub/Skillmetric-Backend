@@ -71,14 +71,14 @@ export class UserManagementService {
         department: dto.department,
         batch: dto.batch,
       },
-      ...(dto.studentId && { studentId: dto.studentId }),
+      ...(dto.candidateId && { candidateId: dto.candidateId }),
     });
 
     await user.save();
 
     // Send welcome email with credentials
     try {
-      await this.emailService.queueStudentWelcomeEmail({
+      await this.emailService.queueCandidateWelcomeEmail({
         name: user.name,
         email: user.email,
         tempPassword,

@@ -4,14 +4,8 @@ import { Document, Types } from 'mongoose';
 export enum UserRole {
   SUPER_ADMIN = 'SUPER_ADMIN',  // Creates organizations, assigns Org Admins
   ORG_ADMIN = 'ORG_ADMIN',      // Manages exams, candidates, recruiters
-  CANDIDATE = 'CANDIDATE',       // Takes exams (replaces STUDENT)
+  CANDIDATE = 'CANDIDATE',       // Takes exams
   RECRUITER = 'RECRUITER',       // Limited: View recruitment exam results only
-
-  // Deprecated roles (keep for migration, will be migrated)
-  INSTRUCTOR = 'INSTRUCTOR',     // @deprecated - migrate to ORG_ADMIN
-  ADMIN = 'ADMIN',               // @deprecated - migrate to ORG_ADMIN
-  STUDENT = 'STUDENT',           // @deprecated - migrate to CANDIDATE
-  PROCTOR = 'PROCTOR',           // @deprecated - migrate to ORG_ADMIN
 }
 
 export enum Gender {
@@ -51,7 +45,7 @@ class Profile {
   @Prop()
   bio?: string;
 
-  // For students
+  // For candidates
   @Prop()
   college?: string;
 
@@ -232,7 +226,7 @@ export class User extends Document {
   isActive: boolean;
 
   @Prop({ unique: true, sparse: true })
-  studentId?: string;
+  candidateId?: string;
 
   @Prop()
   lastLogin?: Date;
@@ -283,10 +277,9 @@ UserSchema.pre('save', function (next) {
     return next();
   }
 
-  // All other roles MUST have at least one organizationId (except CANDIDATE/STUDENT during enrollment)
+  // All other roles MUST have at least one organizationId (except CANDIDATE during enrollment)
   if (
     user.role !== UserRole.CANDIDATE &&
-    user.role !== UserRole.STUDENT && // Keep for backward compatibility during migration
     (!user.organizationIds || user.organizationIds.length === 0)
   ) {
     return next(
@@ -301,7 +294,7 @@ UserSchema.pre('save', function (next) {
 
 // Indexes
 UserSchema.index({ email: 1 });
-UserSchema.index({ studentId: 1 });
+UserSchema.index({ candidateId: 1 });
 UserSchema.index({ role: 1, isActive: 1 });
 UserSchema.index({ organizationIds: 1, role: 1 });
 UserSchema.index({ 'profile.college': 1 });

@@ -190,7 +190,7 @@ export class Result extends Document {
   exam: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: false })
-  student?: Types.ObjectId; // Optional: Required for enrollment, null for invitation
+  candidate?: Types.ObjectId; // Optional: Required for enrollment, null for invitation
 
   @Prop({ type: Types.ObjectId, ref: 'ExamSession', required: true })
   session: Types.ObjectId;
@@ -371,12 +371,12 @@ export const ResultSchema = SchemaFactory.createForClass(Result);
 
 // Indexes
 // Updated indexes to support both enrollment and invitation-based results
-// Unique constraint for enrollment-based results (where student exists)
+// Unique constraint for enrollment-based results (where candidate exists)
 ResultSchema.index(
-  { exam: 1, student: 1, attemptNumber: 1 },
+  { exam: 1, candidate: 1, attemptNumber: 1 },
   {
     unique: true,
-    partialFilterExpression: { student: { $exists: true, $ne: null } },
+    partialFilterExpression: { candidate: { $exists: true, $ne: null } },
   }
 );
 
@@ -392,7 +392,7 @@ ResultSchema.index(
 // Existing indexes
 ResultSchema.index({ exam: 1, 'scoring.totalScore': -1 });
 ResultSchema.index({ exam: 1, 'scoring.percentileRank': -1 });
-ResultSchema.index({ student: 1, status: 1 });
+ResultSchema.index({ candidate: 1, status: 1 });
 ResultSchema.index({ exam: 1, shortlisted: 1 });
 ResultSchema.index({ exam: 1, 'ranking.rank': 1 });
 ResultSchema.index({ status: 1, exam: 1 });

@@ -221,7 +221,7 @@ describe('Multi-Exam Type E2E Tests', () => {
 
       // Verify enrollment in database
       const exam = await examModel.findById(internalExam._id);
-      expect(exam?.enrolledStudents).toContain(techCorpEmployee._id);
+      expect(exam?.enrolledCandidates).toContain(techCorpEmployee._id);
     });
 
     it('should not enroll external candidates in internal exam', async () => {
@@ -603,7 +603,7 @@ describe('Multi-Exam Type E2E Tests', () => {
 
       // Verify enrollment
       const exam = await examModel.findById(generalExam._id);
-      expect(exam?.enrolledStudents).toContain(externalCandidate._id);
+      expect(exam?.enrolledCandidates).toContain(externalCandidate._id);
     });
 
     it('should allow enrolled external candidate to access exam', async () => {

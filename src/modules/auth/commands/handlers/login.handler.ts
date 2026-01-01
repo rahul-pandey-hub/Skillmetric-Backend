@@ -57,7 +57,7 @@ export class LoginHandler implements ICommandHandler<LoginCommand> {
         fullName: user.name,
         email: user.email,
         role: user.role,
-        studentId: user.studentId,
+        candidateId: user.candidateId,
         organizationId: defaultOrgId?.toString(), // Default org
         organizationIds: user.organizationIds.map(id => id.toString()), // All orgs
       },

@@ -11,7 +11,7 @@ export class RegisterHandler implements ICommandHandler<RegisterCommand> {
   constructor(@InjectModel(User.name) private userModel: Model<User>) {}
 
   async execute(command: RegisterCommand) {
-    const { name, email, password, role, studentId } = command;
+    const { name, email, password, role, candidateId } = command;
 
     // Check if user exists
     const existingUser = await this.userModel.findOne({ email });
@@ -28,7 +28,7 @@ export class RegisterHandler implements ICommandHandler<RegisterCommand> {
       email,
       password: hashedPassword,
       role,
-      studentId,
+      candidateId,
     });
 
     await user.save();
@@ -38,7 +38,7 @@ export class RegisterHandler implements ICommandHandler<RegisterCommand> {
       name: user.name,
       email: user.email,
       role: user.role,
-      studentId: user.studentId,
+      candidateId: user.candidateId,
     };
   }
 }

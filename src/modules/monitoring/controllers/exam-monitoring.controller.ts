@@ -14,7 +14,7 @@ export class ExamMonitoringController {
    * Get real-time statistics for an active exam
    */
   @Get('exams/:examId/live')
-  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'INSTRUCTOR', 'RECRUITER')
+  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'RECRUITER')
   async getLiveExamStats(@Param('examId') examId: string) {
     try {
       return await this.monitoringService.getLiveExamStats(examId);
@@ -31,7 +31,7 @@ export class ExamMonitoringController {
    * Get all currently active exams
    */
   @Get('exams/active')
-  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'INSTRUCTOR', 'RECRUITER')
+  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'RECRUITER')
   async getActiveExams() {
     try {
       return await this.monitoringService.getActiveExams();
@@ -49,7 +49,7 @@ export class ExamMonitoringController {
    * Get violation alerts across all exams or specific exam
    */
   @Get('violations')
-  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'INSTRUCTOR', 'RECRUITER')
+  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'RECRUITER')
   async getViolationAlerts(@Param('examId') examId?: string) {
     try {
       return await this.monitoringService.getViolationAlerts(examId);
@@ -83,10 +83,10 @@ export class ExamMonitoringController {
    * Get detailed information about a specific exam session
    */
   @Get('sessions/:sessionId')
-  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'INSTRUCTOR', 'RECRUITER')
-  async getStudentSession(@Param('sessionId') sessionId: string) {
+  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'RECRUITER')
+  async getCandidateSession(@Param('sessionId') sessionId: string) {
     try {
-      return await this.monitoringService.getStudentSession(sessionId);
+      return await this.monitoringService.getCandidateSession(sessionId);
     } catch (error) {
       throw new HttpException(
         error.message || 'Failed to fetch session details',

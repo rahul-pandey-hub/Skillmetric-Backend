@@ -22,7 +22,7 @@ export class ExamAnalyticsController {
    * Includes: participation, scores, time, violations, shortlisting
    */
   @Get(':examId')
-  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'INSTRUCTOR', 'RECRUITER')
+  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'RECRUITER')
   async getExamAnalytics(@Param('examId') examId: string) {
     try {
       return await this.analyticsService.getExamAnalytics(examId);
@@ -40,7 +40,7 @@ export class ExamAnalyticsController {
    * Success rate, average time, difficulty index per question
    */
   @Get(':examId/questions')
-  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'INSTRUCTOR', 'RECRUITER')
+  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'RECRUITER')
   async getQuestionAnalytics(@Param('examId') examId: string) {
     try {
       return await this.analyticsService.getQuestionAnalytics(examId);
@@ -58,7 +58,7 @@ export class ExamAnalyticsController {
    * Performance breakdown by category
    */
   @Get(':examId/categories')
-  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'INSTRUCTOR', 'RECRUITER')
+  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'RECRUITER')
   async getCategoryAnalytics(@Param('examId') examId: string) {
     try {
       return await this.analyticsService.getCategoryAnalytics(examId);
@@ -76,7 +76,7 @@ export class ExamAnalyticsController {
    * Combines exam, question, and category analytics
    */
   @Get(':examId/complete')
-  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'INSTRUCTOR', 'RECRUITER')
+  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'RECRUITER')
   async getCompleteAnalytics(@Param('examId') examId: string) {
     try {
       return await this.analyticsService.getCompleteAnalytics(examId);

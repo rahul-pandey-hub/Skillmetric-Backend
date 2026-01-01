@@ -23,8 +23,8 @@ export interface LiveExamStats {
   };
   recentActivity: {
     timestamp: Date;
-    studentId: string;
-    studentName?: string;
+    candidateId: string;
+    candidateName?: string;
     action: 'STARTED' | 'SUBMITTED' | 'VIOLATION';
     details?: string;
   }[];
@@ -32,16 +32,16 @@ export interface LiveExamStats {
     totalViolations: number;
     recentViolations: {
       timestamp: Date;
-      studentId: string;
-      studentName?: string;
+      candidateId: string;
+      candidateName?: string;
       type: string;
       severity: string;
     }[];
   };
-  liveStudents: {
-    studentId: string;
-    studentName?: string;
-    studentEmail?: string;
+  liveCandidates: {
+    candidateId: string;
+    candidateName?: string;
+    candidateEmail?: string;
     status: string;
     startedAt: Date;
     timeElapsed: number;
@@ -60,10 +60,10 @@ export class ExamMonitoringService {
 
   /**
    * Get live statistics for an active exam
-   * Returns real-time data about students, violations, and progress
+   * Returns real-time data about candidates, violations, and progress
    */
   async getLiveExamStats(examId: string): Promise<LiveExamStats> {
-    const exam = await this.examModel.findById(examId).populate('enrolledStudents');
+    const exam = await this.examModel.findById(examId).populate('enrolledCandidates');
     if (!exam) {
       throw new Error('Exam not found');
     }
@@ -76,11 +76,11 @@ export class ExamMonitoringService {
     // Get all sessions for this exam
     const sessions = await this.sessionModel
       .find({ examId: examId })
-      .populate('studentId', 'name email')
+      .populate('candidateId', 'name email')
       .sort({ updatedAt: -1 });
 
     // Calculate participation
-    const totalEnrolled = exam.enrolledStudents.length;
+    const totalEnrolled = exam.enrolledCandidates.length;
     const totalStarted = sessions.filter((s) => s.status !== 'ACTIVE').length;
     const totalInProgress = sessions.filter((s) => s.status === 'IN_PROGRESS').length;
     const totalSubmitted = sessions.filter((s) => s.status === 'COMPLETED').length;
@@ -92,8 +92,8 @@ export class ExamMonitoringService {
     // Get violation summary
     const violations = this.extractViolationSummary(sessions);
 
-    // Get live students (currently taking exam)
-    const liveStudents = this.extractLiveStudents(sessions, now);
+    // Get live candidates (currently taking exam)
+    const liveCandidates = this.extractLiveCandidates(sessions, now);
 
     return {
       examId,
@@ -113,7 +113,7 @@ export class ExamMonitoringService {
       },
       recentActivity,
       violations,
-      liveStudents,
+      liveCandidates,
     };
   }
 
@@ -140,7 +140,7 @@ export class ExamMonitoringService {
           examCode: exam.code,
           startDate: exam.schedule?.startDate,
           endDate: exam.schedule?.endDate,
-          totalEnrolled: exam.enrolledStudents.length,
+          totalEnrolled: exam.enrolledCandidates.length,
           inProgress,
           timeRemaining: exam.schedule?.endDate
             ? Math.max(0, Math.floor((exam.schedule.endDate.getTime() - now.getTime()) / 1000))
@@ -167,7 +167,7 @@ export class ExamMonitoringService {
 
     const sessionsWithViolations = await this.sessionModel
       .find(query)
-      .populate('studentId', 'name email')
+      .populate('candidateId', 'name email')
       .populate('examId', 'title code')
       .sort({ updatedAt: -1 })
       .limit(50);
@@ -180,9 +180,9 @@ export class ExamMonitoringService {
         examId: (session.examId as any)?._id || session.examId,
         examTitle: (session.examId as any)?.title,
         examCode: (session.examId as any)?.code,
-        studentId: (session.studentId as any)?._id || session.studentId,
-        studentName: (session.studentId as any)?.name,
-        studentEmail: (session.studentId as any)?.email,
+        candidateId: (session.candidateId as any)?._id || session.candidateId,
+        candidateName: (session.candidateId as any)?.name,
+        candidateEmail: (session.candidateId as any)?.email,
         totalViolations: session.violations?.length || 0,
         warningCount: session.warningCount || 0,
         latestViolation: latestViolation
@@ -246,12 +246,12 @@ export class ExamMonitoringService {
   }
 
   /**
-   * Get detailed session info for a specific student
+   * Get detailed session info for a specific candidate
    */
-  async getStudentSession(sessionId: string) {
+  async getCandidateSession(sessionId: string) {
     const session = await this.sessionModel
       .findById(sessionId)
-      .populate('studentId', 'name email')
+      .populate('candidateId', 'name email')
       .populate('examId', 'title code duration');
 
     if (!session) {
@@ -270,10 +270,10 @@ export class ExamMonitoringService {
         code: (session.examId as any)?.code,
         duration: (session.examId as any)?.duration,
       },
-      student: {
-        id: (session.studentId as any)?._id || session.studentId,
-        name: (session.studentId as any)?.name,
-        email: (session.studentId as any)?.email,
+      candidate: {
+        id: (session.candidateId as any)?._id || session.candidateId,
+        name: (session.candidateId as any)?.name,
+        email: (session.candidateId as any)?.email,
       },
       status: session.status,
       startedAt: session.startTime,
@@ -295,8 +295,8 @@ export class ExamMonitoringService {
       if (session.startTime) {
         activity.push({
           timestamp: session.startTime,
-          studentId: session.studentId?._id || session.studentId,
-          studentName: session.studentId?.name,
+          candidateId: session.candidateId?._id || session.candidateId,
+          candidateName: session.candidateId?.name,
           action: 'STARTED' as const,
           details: `Started exam`,
         });
@@ -306,8 +306,8 @@ export class ExamMonitoringService {
       if (session.status === 'COMPLETED' && session.endTime) {
         activity.push({
           timestamp: session.endTime,
-          studentId: session.studentId?._id || session.studentId,
-          studentName: session.studentId?.name,
+          candidateId: session.candidateId?._id || session.candidateId,
+          candidateName: session.candidateId?.name,
           action: 'SUBMITTED' as const,
           details: `Submitted exam`,
         });
@@ -318,8 +318,8 @@ export class ExamMonitoringService {
         session.violations.forEach((violation: any) => {
           activity.push({
             timestamp: violation.timestamp,
-            studentId: session.studentId?._id || session.studentId,
-            studentName: session.studentId?.name,
+            candidateId: session.candidateId?._id || session.candidateId,
+            candidateName: session.candidateId?.name,
             action: 'VIOLATION' as const,
             details: `${violation.type} violation detected`,
           });
@@ -342,8 +342,8 @@ export class ExamMonitoringService {
         session.violations.forEach((violation: any) => {
           recentViolations.push({
             timestamp: violation.timestamp,
-            studentId: session.studentId?._id || session.studentId,
-            studentName: session.studentId?.name,
+            candidateId: session.candidateId?._id || session.candidateId,
+            candidateName: session.candidateId?.name,
             type: violation.type,
             severity: violation.severity || 'MEDIUM',
           });
@@ -360,7 +360,7 @@ export class ExamMonitoringService {
     };
   }
 
-  private extractLiveStudents(sessions: any[], now: Date): any[] {
+  private extractLiveCandidates(sessions: any[], now: Date): any[] {
     return sessions
       .filter((s) => s.status === 'IN_PROGRESS')
       .map((session) => {
@@ -369,9 +369,9 @@ export class ExamMonitoringService {
           : 0;
 
         return {
-          studentId: session.studentId?._id || session.studentId,
-          studentName: session.studentId?.name,
-          studentEmail: session.studentId?.email,
+          candidateId: session.candidateId?._id || session.candidateId,
+          candidateName: session.candidateId?.name,
+          candidateEmail: session.candidateId?.email,
           status: session.status,
           startedAt: session.startTime,
           timeElapsed,

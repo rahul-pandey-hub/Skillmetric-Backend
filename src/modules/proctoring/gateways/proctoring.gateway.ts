@@ -93,7 +93,7 @@ export class ProctoringGateway
         session = new this.sessionModel({
           sessionCode,
           examId: examId,
-          studentId: studentId,
+          candidateId: studentId,
           status: SessionStatus.IN_PROGRESS,
           warningCount: 0,
           startTime,
@@ -147,6 +147,12 @@ export class ProctoringGateway
         return;
       }
 
+      // Check if session is already submitted/completed
+      if (session.status === SessionStatus.COMPLETED || session.status === SessionStatus.AUTO_SUBMITTED) {
+        this.logger.warn(`Ignoring violation for already submitted session ${sessionId}`);
+        return;
+      }
+
       // Check if proctoring is enabled
       if (!exam.proctoringSettings?.enabled) {
         return;
@@ -169,11 +175,11 @@ export class ProctoringGateway
         warningIssued: true,
       };
 
-      // Set student OR invitation based on access source
+      // Set candidate OR invitation based on access source
       if (session.accessSource === 'INVITATION' && session.invitationId) {
         violationData.invitation = session.invitationId;
-      } else if (session.studentId) {
-        violationData.student = session.studentId;
+      } else if (session.candidateId) {
+        violationData.candidate = session.candidateId;
       }
 
       const violation = new this.violationModel(violationData);
@@ -204,7 +210,7 @@ export class ProctoringGateway
       // Broadcast to monitoring admins
       this.server.to(`exam-${exam._id}`).emit('student-violation', {
         sessionId: session._id,
-        studentId: session.studentId,
+        candidateId: session.candidateId,
         violationType: type,
         warningCount: session.warningCount,
         maxWarnings: violationLimit,
@@ -221,20 +227,24 @@ export class ProctoringGateway
         await session.save();
 
         // Force submit on client
-        client.emit('force-submit', {
+        const forceSubmitData = {
           reason: session.autoSubmitReason,
           warningCount: session.warningCount,
           message: 'Exam auto-submitted due to violation limit exceeded',
-        });
+        };
 
+        client.emit('force-submit', forceSubmitData);
         this.logger.warn(
-          `Auto-submitted exam for student ${session.studentId} due to violations`,
+          `🚨 FORCE-SUBMIT event emitted to client for session ${sessionId}`,
+        );
+        this.logger.warn(
+          `Auto-submitted exam for student ${session.candidateId} due to violations`,
         );
 
         // Notify admins
         this.server.to(`exam-${exam._id}`).emit('student-auto-submitted', {
           sessionId: session._id,
-          studentId: session.studentId,
+          candidateId: session.candidateId,
           reason: session.autoSubmitReason,
           finalWarningCount: session.warningCount,
         });
@@ -300,24 +310,8 @@ export class ProctoringGateway
 
       this.logger.log(`Exam submitted for session ${sessionId}`);
 
-      // Auto-grade the exam in the background
-      try {
-        const result = await this.gradingService.gradeExamSession(sessionId);
-        this.logger.log(
-          `Exam auto-graded for session ${sessionId}. Score: ${result.score.obtained}/${result.score.total}`,
-        );
-
-        // If requires manual grading, notify admins
-        if (result.status === 'PENDING') {
-          this.logger.log(
-            `Result ${result._id} requires manual grading for some questions`,
-          );
-          // TODO: Send notification to admins
-        }
-      } catch (gradingError) {
-        this.logger.error('Error grading exam:', gradingError);
-        // Don't fail submission if grading fails
-      }
+      // NOTE: Result creation is handled by the HTTP submit endpoint
+      // to avoid race conditions and duplicate results
     } catch (error) {
       this.logger.error('Error submitting exam:', error);
       client.emit('error', { message: 'Failed to submit exam' });

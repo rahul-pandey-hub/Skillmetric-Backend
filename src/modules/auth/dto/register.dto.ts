@@ -19,13 +19,13 @@ export class RegisterDto {
   @MinLength(6)
   password: string;
 
-  @ApiProperty({ enum: UserRole, example: UserRole.ADMIN })
+  @ApiProperty({ enum: UserRole, example: UserRole.CANDIDATE })
   @IsEnum(UserRole)
   @IsNotEmpty()
   role: UserRole;
 
-  @ApiProperty({ example: 'STU001', required: false })
+  @ApiProperty({ example: 'CAN001', required: false })
   @IsOptional()
   @IsString()
-  studentId?: string;
+  candidateId?: string;
 }

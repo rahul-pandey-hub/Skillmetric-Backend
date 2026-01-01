@@ -64,7 +64,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       id: user._id.toString(),
       email: user.email,
       role: user.role,
-      studentId: user.studentId,
+      candidateId: user.candidateId,
       organizationId: defaultOrgId?.toString() || null, // Default org for backward compatibility
       organizationIds: user.organizationIds.map(id => id.toString()), // All orgs
     };

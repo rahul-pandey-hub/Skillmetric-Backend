@@ -112,7 +112,7 @@ class CategoryAnalysisItem {
 @Schema()
 class TopPerformer {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  studentId: Types.ObjectId;
+  candidateId: Types.ObjectId;
 
   @Prop({ required: true })
   name: string;

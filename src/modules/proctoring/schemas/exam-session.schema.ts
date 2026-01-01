@@ -19,7 +19,7 @@ export class ExamSession extends Document {
   examId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: false })
-  studentId?: Types.ObjectId; // Optional: Required for enrollment, null for invitation
+  candidateId?: Types.ObjectId; // Optional: Required for enrollment, null for invitation
 
   @Prop({ type: String, enum: SessionStatus, default: SessionStatus.IN_PROGRESS })
   status: string;
@@ -87,7 +87,7 @@ export const ExamSessionSchema = SchemaFactory.createForClass(ExamSession);
 
 // Indexes
 ExamSessionSchema.index({ sessionCode: 1 });
-ExamSessionSchema.index({ examId: 1, studentId: 1 });
+ExamSessionSchema.index({ examId: 1, candidateId: 1 });
 ExamSessionSchema.index({ status: 1, startTime: -1 });
 ExamSessionSchema.index({ warningCount: 1 });
 ExamSessionSchema.index({ invitationId: 1 });

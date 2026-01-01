@@ -4,7 +4,7 @@ import { Queue } from 'bull';
 import * as nodemailer from 'nodemailer';
 import { ConfigService } from '@nestjs/config';
 
-export interface StudentWelcomeEmailData {
+export interface CandidateWelcomeEmailData {
   name: string;
   email: string;
   tempPassword?: string; // Optional - only for new users
@@ -22,9 +22,9 @@ export interface OrgAdminWelcomeEmailData {
 }
 
 export interface ResultNotificationEmailData {
-  studentId: string;
-  studentName: string;
-  studentEmail: string;
+  candidateId: string;
+  candidateName: string;
+  candidateEmail: string;
   examId: string;
   examTitle: string;
   score: number;
@@ -43,9 +43,9 @@ export interface ResultNotificationEmailData {
 }
 
 export interface ExamReminderEmailData {
-  studentId: string;
-  studentName: string;
-  studentEmail: string;
+  candidateId: string;
+  candidateName: string;
+  candidateEmail: string;
   examId: string;
   examTitle: string;
   examDescription?: string;
@@ -140,11 +140,11 @@ export class EmailService {
   }
 
   /**
-   * Queue a student welcome email with credentials
+   * Queue a candidate welcome email with credentials
    */
-  async queueStudentWelcomeEmail(data: StudentWelcomeEmailData) {
+  async queueCandidateWelcomeEmail(data: CandidateWelcomeEmailData) {
     try {
-      await this.emailQueue.add('student-welcome', data, {
+      await this.emailQueue.add('candidate-welcome', data, {
         priority: 1, // High priority
       });
       this.logger.log(`Queued welcome email for ${data.email}`);
@@ -155,13 +155,13 @@ export class EmailService {
   }
 
   /**
-   * Queue bulk student welcome emails
+   * Queue bulk candidate welcome emails
    */
-  async queueBulkStudentWelcomeEmails(students: StudentWelcomeEmailData[]) {
+  async queueBulkCandidateWelcomeEmails(candidates: CandidateWelcomeEmailData[]) {
     try {
-      const jobs = students.map((student, index) => ({
-        name: 'student-welcome',
-        data: student,
+      const jobs = candidates.map((candidate, index) => ({
+        name: 'candidate-welcome',
+        data: candidate,
         opts: {
           priority: 2, // Normal priority for bulk
           delay: index * 100, // Stagger emails by 100ms to avoid rate limits
@@ -169,7 +169,7 @@ export class EmailService {
       }));
 
       await this.emailQueue.addBulk(jobs);
-      this.logger.log(`Queued ${students.length} welcome emails`);
+      this.logger.log(`Queued ${candidates.length} welcome emails`);
     } catch (error) {
       this.logger.error('Failed to queue bulk emails:', error);
       throw error;
@@ -177,9 +177,9 @@ export class EmailService {
   }
 
   /**
-   * Send student welcome email (called by processor)
+   * Send candidate welcome email (called by processor)
    */
-  async sendStudentWelcomeEmail(data: StudentWelcomeEmailData) {
+  async sendCandidateWelcomeEmail(data: CandidateWelcomeEmailData) {
     const { name, email, tempPassword, examTitle, examId, isNewUser } = data;
 
     // Different content for new vs existing users
@@ -187,8 +187,8 @@ export class EmailService {
 
     // Create exam access link if examId is provided
     const examLink = examId
-      ? `${this.configService.get('FRONTEND_URL', 'http://localhost:3000')}/student/exam/${examId}`
-      : `${this.configService.get('FRONTEND_URL', 'http://localhost:3000')}/student/dashboard`;
+      ? `${this.configService.get('FRONTEND_URL', 'http://localhost:3000')}/candidate/exam/${examId}`
+      : `${this.configService.get('FRONTEND_URL', 'http://localhost:3000')}/candidate/dashboard`;
 
     const htmlContent = `
 <!DOCTYPE html>
@@ -587,9 +587,9 @@ The SkillMetric Team
       await this.emailQueue.add('result-notification', data, {
         priority: 1, // High priority
       });
-      this.logger.log(`Queued result notification email for ${data.studentEmail}`);
+      this.logger.log(`Queued result notification email for ${data.candidateEmail}`);
     } catch (error) {
-      this.logger.error(`Failed to queue result notification for ${data.studentEmail}:`, error);
+      this.logger.error(`Failed to queue result notification for ${data.candidateEmail}:`, error);
       throw error;
     }
   }
@@ -621,8 +621,8 @@ The SkillMetric Team
    */
   async sendResultNotificationEmail(data: ResultNotificationEmailData) {
     const {
-      studentName,
-      studentEmail,
+      candidateName,
+      candidateEmail,
       examTitle,
       score,
       totalMarks,
@@ -636,7 +636,7 @@ The SkillMetric Team
       examId
     } = data;
 
-    const resultLink = `${this.configService.get('FRONTEND_URL', 'http://localhost:3000')}/student/results/${examId}`;
+    const resultLink = `${this.configService.get('FRONTEND_URL', 'http://localhost:3000')}/candidate/results/${examId}`;
 
     const htmlContent = `
 <!DOCTYPE html>
@@ -758,7 +758,7 @@ The SkillMetric Team
       <h1>🎓 Your Exam Results Are Ready!</h1>
     </div>
     <div class="content">
-      <h2>Hello ${studentName}!</h2>
+      <h2>Hello ${candidateName}!</h2>
       <p>Your results for <strong>${examTitle}</strong> have been published.</p>
 
       <div class="score-card">
@@ -836,7 +836,7 @@ The SkillMetric Team
     const textContent = `
 Your ${examTitle} Results Are Ready!
 
-Hello ${studentName},
+Hello ${candidateName},
 
 Your results for ${examTitle} have been published.
 
@@ -872,7 +872,7 @@ The SkillMetric Team
 
     const mailOptions = {
       from: `"SkillMetric Platform" <${this.configService.get('SMTP_FROM', this.configService.get('SMTP_USER'))}>`,
-      to: studentEmail,
+      to: candidateEmail,
       subject: `Your ${examTitle} Results - ${passed ? 'Congratulations!' : 'Results Available'}`,
       text: textContent,
       html: htmlContent,
@@ -880,10 +880,10 @@ The SkillMetric Team
 
     try {
       const info = await this.transporter.sendMail(mailOptions);
-      this.logger.log(`Result notification email sent successfully to ${studentEmail}: ${info.messageId}`);
+      this.logger.log(`Result notification email sent successfully to ${candidateEmail}: ${info.messageId}`);
       return info;
     } catch (error) {
-      this.logger.error(`Failed to send result notification email to ${studentEmail}:`, error);
+      this.logger.error(`Failed to send result notification email to ${candidateEmail}:`, error);
       throw error;
     }
   }
@@ -898,11 +898,11 @@ The SkillMetric Team
         delay: delayMs,
       });
       this.logger.log(
-        `Queued ${data.reminderType} reminder for ${data.studentEmail} (exam: ${data.examTitle})`,
+        `Queued ${data.reminderType} reminder for ${data.candidateEmail} (exam: ${data.examTitle})`,
       );
     } catch (error) {
       this.logger.error(
-        `Failed to queue ${data.reminderType} reminder for ${data.studentEmail}:`,
+        `Failed to queue ${data.reminderType} reminder for ${data.candidateEmail}:`,
         error,
       );
       throw error;
@@ -938,8 +938,8 @@ The SkillMetric Team
    */
   async sendExamReminderEmail(data: ExamReminderEmailData) {
     const {
-      studentName,
-      studentEmail,
+      candidateName,
+      candidateEmail,
       examTitle,
       examDescription,
       startDate,
@@ -948,7 +948,7 @@ The SkillMetric Team
       examId,
     } = data;
 
-    const examLink = `${this.configService.get('FRONTEND_URL', 'http://localhost:3000')}/student/exam/${examId}`;
+    const examLink = `${this.configService.get('FRONTEND_URL', 'http://localhost:3000')}/candidate/exam/${examId}`;
     const startDateFormatted = new Date(startDate).toLocaleString('en-US', {
       weekday: 'long',
       year: 'numeric',
@@ -1062,7 +1062,7 @@ The SkillMetric Team
       <h1>${reminderType === '24h' ? '⏰ Exam Tomorrow!' : '🚨 Exam Starting Soon!'}</h1>
     </div>
     <div class="content">
-      <h2>Hello ${studentName}!</h2>
+      <h2>Hello ${candidateName}!</h2>
 
       <div class="urgent-box">
         <strong>${reminderType === '24h' ? '📅' : '⚡'} Important Reminder:</strong>
@@ -1132,7 +1132,7 @@ The SkillMetric Team
     const textContent = `
 ${reminderType === '24h' ? 'EXAM TOMORROW!' : 'EXAM STARTING SOON!'}
 
-Hello ${studentName},
+Hello ${candidateName},
 
 Important Reminder: Your exam "${examTitle}" is starting in ${timeUntilExam}!
 
@@ -1164,7 +1164,7 @@ The SkillMetric Team
 
     const mailOptions = {
       from: `"SkillMetric Platform" <${this.configService.get('SMTP_FROM', this.configService.get('SMTP_USER'))}>`,
-      to: studentEmail,
+      to: candidateEmail,
       subject: reminderType === '24h'
         ? `⏰ Reminder: ${examTitle} - Tomorrow`
         : `🚨 Final Reminder: ${examTitle} - Starting in 1 Hour!`,
@@ -1175,11 +1175,11 @@ The SkillMetric Team
     try {
       const info = await this.transporter.sendMail(mailOptions);
       this.logger.log(
-        `Exam reminder email sent successfully to ${studentEmail}: ${info.messageId}`,
+        `Exam reminder email sent successfully to ${candidateEmail}: ${info.messageId}`,
       );
       return info;
     } catch (error) {
-      this.logger.error(`Failed to send exam reminder email to ${studentEmail}:`, error);
+      this.logger.error(`Failed to send exam reminder email to ${candidateEmail}:`, error);
       throw error;
     }
   }

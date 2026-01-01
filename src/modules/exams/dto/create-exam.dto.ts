@@ -149,7 +149,7 @@ export class CreateExamDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  enrolledStudents?: string[];
+  enrolledCandidates?: string[];
 
   @ApiProperty({ type: ProctoringSettingsDto })
   @ValidateNested()

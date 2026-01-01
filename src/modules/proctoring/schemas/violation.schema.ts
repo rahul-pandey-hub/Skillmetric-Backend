@@ -26,7 +26,7 @@ export class Violation extends Document {
   session: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: false })
-  student: Types.ObjectId; // For enrolled students
+  candidate: Types.ObjectId; // For enrolled candidates
 
   @Prop({ type: Types.ObjectId, ref: 'ExamInvitation', required: false })
   invitation: Types.ObjectId; // For invitation-based (guest) candidates
@@ -72,5 +72,5 @@ export const ViolationSchema = SchemaFactory.createForClass(Violation);
 
 // Indexes
 ViolationSchema.index({ session: 1, type: 1 });
-ViolationSchema.index({ student: 1, detectedAt: -1 });
+ViolationSchema.index({ candidate: 1, detectedAt: -1 });
 ViolationSchema.index({ severity: 1, 'review.status': 1 });

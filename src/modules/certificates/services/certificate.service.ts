@@ -31,7 +31,7 @@ export class CertificateService {
     // Fetch result with populated data
     const result = await this.resultModel
       .findById(resultId)
-      .populate('student')
+      .populate('candidate')
       .populate('exam')
       .exec();
 
@@ -50,7 +50,7 @@ export class CertificateService {
       return result.certificate.certificateUrl;
     }
 
-    const student = result.student as any;
+    const candidate = result.candidate as any;
     const exam = result.exam as any;
 
     // Generate certificate ID
@@ -63,7 +63,7 @@ export class CertificateService {
     await this.createCertificatePDF({
       filepath,
       certificateId,
-      studentName: student.name,
+      studentName: candidate.name,
       examTitle: exam.title,
       score: result.score.obtained,
       totalMarks: result.score.total,
@@ -87,7 +87,7 @@ export class CertificateService {
   }
 
   /**
-   * Generate certificates for all passed students in an exam
+   * Generate certificates for all passed candidates in an exam
    */
   async generateCertificatesForExam(examId: string): Promise<{
     generated: number;
@@ -99,7 +99,7 @@ export class CertificateService {
         exam: examId,
         'score.passed': true,
       })
-      .populate('student')
+      .populate('candidate')
       .populate('exam')
       .exec();
 

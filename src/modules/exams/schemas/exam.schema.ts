@@ -289,7 +289,7 @@ export class Exam extends Document {
   totalQuestions: number;
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
-  enrolledStudents: Types.ObjectId[];
+  enrolledCandidates: Types.ObjectId[];
 
   @Prop({ type: AccessControl, default: () => ({}) })
   accessControl: AccessControl;
@@ -358,4 +358,4 @@ ExamSchema.index({ organizationId: 1, status: 1 });
 ExamSchema.index({ status: 1 });
 ExamSchema.index({ 'schedule.startDate': 1, 'schedule.endDate': 1 });
 ExamSchema.index({ createdBy: 1 });
-ExamSchema.index({ enrolledStudents: 1 });
+ExamSchema.index({ enrolledCandidates: 1 });

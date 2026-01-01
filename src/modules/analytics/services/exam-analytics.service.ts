@@ -62,7 +62,7 @@ export class ExamAnalyticsService {
    */
   private async getParticipationMetrics(examId: string) {
     const exam = await this.examModel.findById(examId);
-    const totalEnrolled = exam.enrolledStudents.length;
+    const totalEnrolled = exam.enrolledCandidates.length;
 
     const sessions = await this.sessionModel.find({ examId: examId });
     const totalStarted = sessions.filter((s) => s.status !== 'ACTIVE').length;

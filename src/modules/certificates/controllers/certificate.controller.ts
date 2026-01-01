@@ -31,13 +31,13 @@ export class CertificateController {
   constructor(private readonly certificateService: CertificateService) {}
 
   @Post('result/:resultId/generate')
-  @Roles(UserRole.STUDENT, UserRole.RECRUITER, UserRole.ORG_ADMIN, UserRole.INSTRUCTOR)
+  @Roles(UserRole.CANDIDATE, UserRole.RECRUITER, UserRole.ORG_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate certificate for a result' })
   @ApiParam({ name: 'resultId', description: 'Result ID' })
   @ApiResponse({ status: 201, description: 'Certificate generated successfully' })
   @ApiResponse({ status: 404, description: 'Result not found' })
-  @ApiResponse({ status: 400, description: 'Student did not pass' })
+  @ApiResponse({ status: 400, description: 'Candidate did not pass' })
   async generateCertificate(@Param('resultId') resultId: string) {
     const certificateUrl = await this.certificateService.generateCertificate(resultId);
 
@@ -48,9 +48,9 @@ export class CertificateController {
   }
 
   @Post('exam/:examId/generate-all')
-  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN, UserRole.INSTRUCTOR)
+  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Generate certificates for all passed students in an exam' })
+  @ApiOperation({ summary: 'Generate certificates for all passed candidates in an exam' })
   @ApiParam({ name: 'examId', description: 'Exam ID' })
   @ApiResponse({
     status: 201,
@@ -66,7 +66,7 @@ export class CertificateController {
   }
 
   @Get('result/:resultId')
-  @Roles(UserRole.STUDENT, UserRole.RECRUITER, UserRole.ORG_ADMIN, UserRole.INSTRUCTOR)
+  @Roles(UserRole.CANDIDATE, UserRole.RECRUITER, UserRole.ORG_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get certificate URL for a result' })
   @ApiParam({ name: 'resultId', description: 'Result ID' })

@@ -5,6 +5,7 @@ import { Result, ResultStatus } from '../schemas/result.schema';
 import { Question } from '../../questions/schemas/question.schema';
 import { Exam } from '../../exams/schemas/exam.schema';
 import { ExamSession } from '../../proctoring/schemas/exam-session.schema';
+import { Violation } from '../../proctoring/schemas/violation.schema';
 import { User } from '../../users/schemas/user.schema';
 import { GradingUtil } from '../../../common/utils/grading.util';
 import { EmailService } from '../../email/services/email.service';
@@ -17,6 +18,7 @@ export class GradingService {
     @InjectModel(Question.name) private questionModel: Model<Question>,
     @InjectModel(Exam.name) private examModel: Model<Exam>,
     @InjectModel(ExamSession.name) private sessionModel: Model<ExamSession>,
+    @InjectModel(Violation.name) private violationModel: Model<Violation>,
     @InjectModel(User.name) private userModel: Model<User>,
     private emailService: EmailService,
     private certificateService: CertificateService,
@@ -29,7 +31,7 @@ export class GradingService {
     // Fetch session with answers
     const session = await this.sessionModel
       .findById(sessionId)
-      .populate('examId studentId')
+      .populate('examId candidateId')
       .exec();
 
     if (!session) {
@@ -72,7 +74,7 @@ export class GradingService {
       let studentAnswer;
       if (answerObj) {
         if (question.type === 'MULTIPLE_CHOICE' || question.type === 'MULTIPLE_RESPONSE') {
-          studentAnswer = answerObj.selectedOptions;
+          studentAnswer = answerObj.selectedOptions || (answerObj.selectedOption ? [answerObj.selectedOption] : []);
         } else if (question.type === 'TRUE_FALSE') {
           studentAnswer = answerObj.selectedOption;
         } else {
@@ -80,9 +82,18 @@ export class GradingService {
         }
       }
 
+      // Get correct answer - prefer option IDs from isCorrect flags
+      let correctAnswer = question.correctAnswer;
+      if (question.type === 'MULTIPLE_CHOICE' || question.type === 'MULTIPLE_RESPONSE') {
+        const correctOptions = question.options?.filter(opt => opt.isCorrect) || [];
+        if (correctOptions.length > 0) {
+          correctAnswer = correctOptions.map(opt => opt.id);
+        }
+      }
+
       const gradingResult = GradingUtil.gradeQuestion({
         questionType: question.type,
-        correctAnswer: question.correctAnswer,
+        correctAnswer: correctAnswer,
         studentAnswer: studentAnswer,
         marks: question.marks,
         negativeMarks: question.negativeMarks || 0,
@@ -173,19 +184,38 @@ export class GradingService {
       ? ResultStatus.PENDING
       : ResultStatus.GRADED;
 
+    // Check for existing results
+    const existingResults = await this.resultModel.find({
+      exam: exam._id,
+      candidate: session.candidateId
+    }).exec();
+
+    console.log('[GradingService] Existing results:', existingResults.length);
+    if (existingResults.length > 0) {
+      console.log('[GradingService] ⚠️ Result already exists, returning existing result');
+      return existingResults[0];
+    }
+
     // Create or update result
+    const attemptNumber = 1; // Default to attempt 1
+    console.log('[GradingService] Creating new result for session:', session._id);
     const result = await this.resultModel.findOneAndUpdate(
-      { exam: exam._id, student: session.studentId },
+      { exam: exam._id, candidate: session.candidateId, attemptNumber },
       {
         exam: exam._id,
-        student: session.studentId,
+        candidate: session.candidateId,
+        attemptNumber,
         session: session._id,
         status,
-        score: {
-          obtained: Math.max(0, finalScore), // Use final score after penalty
-          total: totalPossibleMarks,
+        scoring: {
+          totalScore: Math.max(0, finalScore), // Use final score after penalty
+          totalMarks: totalPossibleMarks,
           percentage: Math.max(0, finalPercentage), // Use final percentage after penalty
           passed,
+          correctAnswers: analysis.correct,
+          incorrectAnswers: analysis.incorrect,
+          unanswered: analysis.unanswered,
+          negativeMarks: scoreCalculation.totalMarks - finalScore, // Penalty amount
         },
         questionResults,
         analysis: {
@@ -283,10 +313,10 @@ export class GradingService {
       throw new NotFoundException('Exam not found');
     }
 
-    // Get all GRADED results with student details
+    // Get all GRADED results with candidate details
     const results = await this.resultModel
       .find({ exam: examId, status: ResultStatus.GRADED })
-      .populate('student')
+      .populate('candidate')
       .exec();
 
     let publishedCount = 0;
@@ -313,11 +343,11 @@ export class GradingService {
 
       // Queue result notification email
       try {
-        const student = result.student as any;
+        const candidate = result.candidate as any;
         await this.emailService.queueResultNotificationEmail({
-          studentId: student._id.toString(),
-          studentName: student.name,
-          studentEmail: student.email,
+          candidateId: candidate._id.toString(),
+          candidateName: candidate.name,
+          candidateEmail: candidate.email,
           examId: examId,
           examTitle: exam.title,
           score: result.score.obtained,
@@ -368,22 +398,23 @@ export class GradingService {
    * Get violation breakdown for a session
    */
   private async getViolationBreakdown(sessionId: string): Promise<any> {
-    const session = await this.sessionModel
-      .findById(sessionId)
-      .populate('violations')
+    // Fetch detailed violations from Violation collection
+    const violations = await this.violationModel
+      .find({ session: sessionId })
+      .sort({ detectedAt: 1 })
       .exec();
 
-    if (!session || !session.violations) {
-      return {};
+    if (!violations || violations.length === 0) {
+      return [];
     }
 
-    const breakdown: any = {};
-    (session.violations as any[]).forEach((violation: any) => {
-      const type = violation.type || 'UNKNOWN';
-      breakdown[type] = (breakdown[type] || 0) + 1;
-    });
-
-    return breakdown;
+    // Return array of violation details for frontend
+    return violations.map(v => ({
+      type: v.type,
+      severity: v.severity,
+      detectedAt: v.detectedAt,
+      warningIssued: v.warningIssued,
+    }));
   }
 
   /**
@@ -392,18 +423,18 @@ export class GradingService {
   async getExamResults(examId: string): Promise<Result[]> {
     return this.resultModel
       .find({ exam: examId })
-      .populate('student', 'name email studentId')
+      .populate('candidate', 'name email')
       .sort({ 'score.obtained': -1 })
       .exec();
   }
 
   /**
-   * Get result for a specific student
+   * Get result for a specific candidate
    */
   async getStudentResult(examId: string, studentId: string): Promise<Result> {
     const result = await this.resultModel
-      .findOne({ exam: examId, student: studentId })
-      .populate('student', 'name email studentId')
+      .findOne({ exam: examId, candidate: studentId })
+      .populate('candidate', 'name email')
       .exec();
 
     if (!result) {

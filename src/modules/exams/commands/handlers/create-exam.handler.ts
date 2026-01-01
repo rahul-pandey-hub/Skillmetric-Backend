@@ -34,7 +34,7 @@ export class CreateExamHandler implements ICommandHandler<CreateExamCommand> {
       createdBy: userId,
       status: createExamDto.status || ExamStatus.DRAFT,
       questions: createExamDto.questions || [],
-      enrolledStudents: createExamDto.enrolledStudents || [],
+      enrolledCandidates: createExamDto.enrolledCandidates || [],
     });
 
     await exam.save();
@@ -52,7 +52,7 @@ export class CreateExamHandler implements ICommandHandler<CreateExamCommand> {
       settings: exam.settings,
       createdBy: exam.createdBy,
       questions: exam.questions,
-      enrolledStudents: exam.enrolledStudents,
+      enrolledCandidates: exam.enrolledCandidates,
     };
   }
 }

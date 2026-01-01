@@ -279,7 +279,7 @@ export class InvitationExamsController {
     // Create exam session
     const session = new this.examSessionModel({
       examId: exam._id,
-      studentId: null, // No student ID for invitation-based access
+      candidateId: null, // No candidate ID for invitation-based access
       accessSource: 'INVITATION',
       invitationId: invitation._id,
       guestCandidateInfo: {

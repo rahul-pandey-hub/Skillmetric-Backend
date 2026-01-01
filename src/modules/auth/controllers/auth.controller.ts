@@ -54,7 +54,7 @@ export class AuthController {
         registerDto.email,
         registerDto.password,
         registerDto.role,
-        registerDto.studentId,
+        registerDto.candidateId,
       ),
     );
   }

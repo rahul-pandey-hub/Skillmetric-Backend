@@ -316,7 +316,7 @@ async function bootstrap() {
             name: `Test User ${i + 1}`,
             email: userEmail,
             password,
-            role: UserRole.STUDENT,
+            role: UserRole.CANDIDATE,
             organizationId: org._id,
             isActive: true,
             emailVerified: true,

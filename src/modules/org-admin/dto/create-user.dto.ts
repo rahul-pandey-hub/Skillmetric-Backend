@@ -48,7 +48,7 @@ export class CreateUserDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  studentId?: string;
+  candidateId?: string;
 }
 
 export class BulkCreateUsersDto {

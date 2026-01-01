@@ -11,12 +11,12 @@ import { UserRole } from '../../users/schemas/user.schema';
 import { CreateExamCommand } from '../commands/impl/create-exam.command';
 import { AddQuestionsToExamCommand } from '../commands/impl/add-questions-to-exam.command';
 import { RemoveQuestionsFromExamCommand } from '../commands/impl/remove-questions-from-exam.command';
-import { EnrollStudentsCommand } from '../commands/impl/enroll-students.command';
+import { EnrollCandidatesCommand } from '../commands/impl/enroll-candidates.command';
 import { SendInvitationsCommand } from '../commands/impl/send-invitations.command';
 import { CreateExamDto } from '../dto/create-exam.dto';
 import { AddQuestionsDto } from '../dto/add-questions.dto';
 import { RemoveQuestionsDto } from '../dto/remove-questions.dto';
-import { EnrollStudentsDto } from '../dto/enroll-students.dto';
+import { EnrollCandidatesDto } from '../dto/enroll-candidates.dto';
 import { SendInvitationsDto } from '../dto/send-invitations.dto';
 import { Exam } from '../schemas/exam.schema';
 import { Result } from '../../results/schemas/result.schema';
@@ -40,7 +40,7 @@ export class ExamsController {
   ) {}
 
   @Post()
-  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN, UserRole.INSTRUCTOR)
+  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new exam' })
   @ApiResponse({ status: 201, description: 'Exam created successfully' })
@@ -58,7 +58,7 @@ export class ExamsController {
   }
 
   @Get()
-  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN, UserRole.INSTRUCTOR)
+  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all exams within your organization' })
   @ApiResponse({ status: 200, description: 'Exams retrieved successfully' })
@@ -66,9 +66,9 @@ export class ExamsController {
     // Filter by organizationId instead of just createdBy
     const filter: any = { organizationId: req.user.organizationId };
 
-    // Recruiters/Instructors can only see their own exams
+    // Recruiters can only see their own exams
     // Org Admins can see all exams in their organization
-    if (req.user.role === UserRole.RECRUITER || req.user.role === UserRole.INSTRUCTOR) {
+    if (req.user.role === UserRole.RECRUITER) {
       filter.createdBy = req.user.id;
     }
 
@@ -101,6 +101,7 @@ export class ExamsController {
     const exam = await this.examModel
       .findById(id)
       .populate('createdBy', 'name email')
+      .populate('enrolledCandidates', 'name email metadata')
       .exec();
 
     if (!exam) {
@@ -117,11 +118,22 @@ export class ExamsController {
       (exam as any).questions = populatedQuestions;
     }
 
+    // Manually populate enrolledCandidates since .populate() isn't working
+    if (exam.enrolledCandidates && exam.enrolledCandidates.length > 0) {
+      const populatedCandidates = await this.userModel
+        .find({ _id: { $in: exam.enrolledCandidates } })
+        .select('name email metadata')
+        .exec();
+
+      // Replace the candidate IDs with actual candidate objects
+      (exam as any).enrolledCandidates = populatedCandidates;
+    }
+
     return exam;
   }
 
   @Post(':id/questions')
-  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN, UserRole.INSTRUCTOR)
+  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add questions to an exam' })
   @ApiParam({ name: 'id', description: 'Exam ID' })
@@ -143,7 +155,7 @@ export class ExamsController {
   }
 
   @Delete(':id/questions')
-  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN, UserRole.INSTRUCTOR)
+  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Remove questions from an exam' })
   @ApiParam({ name: 'id', description: 'Exam ID' })
@@ -165,7 +177,7 @@ export class ExamsController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN, UserRole.INSTRUCTOR)
+  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete an exam' })
   @ApiParam({ name: 'id', description: 'Exam ID' })
@@ -197,17 +209,17 @@ export class ExamsController {
     };
   }
 
-  @Post(':id/enroll-students')
+  @Post(':id/enroll-candidates')
   @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Bulk enroll students to an exam' })
+  @ApiOperation({ summary: 'Bulk enroll candidates to an exam' })
   @ApiParam({ name: 'id', description: 'Exam ID' })
   @ApiResponse({
     status: 200,
-    description: 'Students enrolled successfully',
+    description: 'Candidates enrolled successfully',
     schema: {
       example: {
-        message: 'Student enrollment processed',
+        message: 'Candidate enrollment processed',
         summary: {
           total: 10,
           enrolled: 8,
@@ -226,9 +238,9 @@ export class ExamsController {
   })
   @ApiResponse({ status: 404, description: 'Exam not found' })
   @ApiResponse({ status: 403, description: 'Forbidden - not the creator' })
-  async enrollStudents(
+  async enrollCandidates(
     @Param('id') examId: string,
-    @Body() enrollStudentsDto: EnrollStudentsDto,
+    @Body() enrollCandidatesDto: EnrollCandidatesDto,
     @Request() req,
   ) {
     if (!Types.ObjectId.isValid(examId)) {
@@ -236,8 +248,68 @@ export class ExamsController {
     }
 
     return this.commandBus.execute(
-      new EnrollStudentsCommand(examId, enrollStudentsDto, req.user.id),
+      new EnrollCandidatesCommand(examId, enrollCandidatesDto, req.user.id),
     );
+  }
+
+  @Post(':id/unenroll-candidates')
+  @Roles(UserRole.RECRUITER, UserRole.ORG_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Unenroll candidates from an exam' })
+  @ApiParam({ name: 'id', description: 'Exam ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Candidates unenrolled successfully',
+    schema: {
+      example: {
+        message: 'Candidates unenrolled successfully',
+        unenrolled: 5,
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Exam not found' })
+  @ApiResponse({ status: 403, description: 'Forbidden - not the creator' })
+  async unenrollCandidates(
+    @Param('id') examId: string,
+    @Body() body: { candidateIds: string[] },
+    @Request() req,
+  ) {
+    if (!Types.ObjectId.isValid(examId)) {
+      throw new BadRequestException('Invalid exam ID format');
+    }
+
+    const exam = await this.examModel.findById(examId).exec();
+
+    if (!exam) {
+      throw new NotFoundException('Exam not found');
+    }
+
+    // Check if user is the creator or ORG_ADMIN
+    if (req.user.role !== UserRole.ORG_ADMIN && exam.createdBy.toString() !== req.user.id) {
+      throw new ForbiddenException('You are not authorized to modify this exam');
+    }
+
+    // Validate candidateIds
+    const validCandidateIds = body.candidateIds.filter(id => Types.ObjectId.isValid(id));
+
+    if (validCandidateIds.length === 0) {
+      throw new BadRequestException('No valid candidate IDs provided');
+    }
+
+    // Remove candidates from enrolledCandidates array
+    const originalCount = exam.enrolledCandidates.length;
+    exam.enrolledCandidates = exam.enrolledCandidates.filter(
+      candidateId => !validCandidateIds.includes(candidateId.toString())
+    );
+
+    const unenrolledCount = originalCount - exam.enrolledCandidates.length;
+
+    await exam.save();
+
+    return {
+      message: 'Candidates unenrolled successfully',
+      unenrolled: unenrolledCount,
+    };
   }
 
   @Post(':id/invitations')
@@ -293,11 +365,11 @@ export class ExamsController {
   }
 
   @Get(':id/results')
-  @Roles(UserRole.ORG_ADMIN, UserRole.RECRUITER, UserRole.INSTRUCTOR)
+  @Roles(UserRole.ORG_ADMIN, UserRole.RECRUITER)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get exam results with analytics',
-    description: 'Get comprehensive results for all participants (enrolled students and invitation-based candidates) with violation counts and statistics',
+    description: 'Get comprehensive results for all participants (enrolled candidates and invitation-based candidates) with violation counts and statistics',
   })
   @ApiParam({ name: 'id', description: 'Exam ID' })
   @ApiResponse({ status: 200, description: 'Results retrieved successfully' })
@@ -320,8 +392,8 @@ export class ExamsController {
 
     // Fetch all results for this exam
     const results = await this.resultModel
-      .find({ exam: examId })
-      .populate('student', 'name email phone')
+      .find({ exam: new Types.ObjectId(examId) })
+      .populate('candidate', 'name email phone')
       .populate('session')
       .sort({ 'scoring.totalScore': -1 })
       .exec();
@@ -368,11 +440,11 @@ export class ExamsController {
       let candidateEmail = 'N/A';
       let candidatePhone = '';
 
-      if (result.student) {
-        const student = result.student as any;
-        candidateName = student.name || 'Unknown';
-        candidateEmail = student.email || 'N/A';
-        candidatePhone = student.phone || '';
+      if (result.candidate) {
+        const candidate = result.candidate as any;
+        candidateName = candidate.name || 'Unknown';
+        candidateEmail = candidate.email || 'N/A';
+        candidatePhone = candidate.phone || '';
       } else if (result.guestCandidateInfo) {
         candidateName = result.guestCandidateInfo.name;
         candidateEmail = result.guestCandidateInfo.email;
@@ -463,6 +535,129 @@ export class ExamsController {
         totalViolations,
         averageViolations,
       },
+    };
+  }
+
+  @Get(':examId/results/:resultId')
+  @Roles(UserRole.ORG_ADMIN, UserRole.RECRUITER)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get detailed result for a specific candidate' })
+  @ApiParam({ name: 'examId', description: 'Exam ID' })
+  @ApiParam({ name: 'resultId', description: 'Result ID' })
+  @ApiResponse({ status: 200, description: 'Result details retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Result not found' })
+  async getResultDetail(
+    @Param('examId') examId: string,
+    @Param('resultId') resultId: string,
+    @Request() req
+  ) {
+    // Verify exam exists and user has access
+    const exam = await this.examModel.findById(examId).exec();
+    if (!exam) {
+      throw new NotFoundException('Exam not found');
+    }
+
+    // Check authorization
+    if (req.user.role !== UserRole.ORG_ADMIN && exam.createdBy.toString() !== req.user.id) {
+      throw new ForbiddenException('You are not authorized to view this result');
+    }
+
+    // Get result with full details
+    const result = await this.resultModel
+      .findById(resultId)
+      .populate('candidate', 'name email phone')
+      .populate('session')
+      .exec();
+
+    if (!result || result.exam.toString() !== examId) {
+      throw new NotFoundException('Result not found');
+    }
+
+    // Get session details
+    const session = await this.sessionModel.findById(result.session).exec();
+
+    // Get violations for this session
+    const violations = await this.violationModel
+      .find({ session: result.session })
+      .sort({ detectedAt: 1 })
+      .exec();
+
+    // Calculate rank
+    const allResults = await this.resultModel
+      .find({ exam: new Types.ObjectId(examId), status: { $in: ['GRADED', 'PUBLISHED'] } })
+      .sort({ 'scoring.totalScore': -1 })
+      .exec();
+
+    const rank = allResults.findIndex(r => r._id.toString() === resultId) + 1;
+    const percentile = allResults.length > 1
+      ? ((allResults.length - rank + 1) / allResults.length) * 100
+      : 100;
+
+    // Get candidate info
+    let candidateName = 'Unknown';
+    let candidateEmail = 'N/A';
+    if (result.candidate) {
+      const candidate = result.candidate as any;
+      candidateName = candidate.name || 'Unknown';
+      candidateEmail = candidate.email || 'N/A';
+    } else if (result.guestCandidateInfo) {
+      candidateName = result.guestCandidateInfo.name;
+      candidateEmail = result.guestCandidateInfo.email;
+    }
+
+    return {
+      _id: result._id,
+      exam: {
+        _id: exam._id,
+        title: exam.title,
+        code: exam.code,
+        description: (exam as any).description,
+        duration: exam.duration,
+        totalMarks: (exam as any).grading?.totalMarks,
+        passingMarks: (exam as any).grading?.passingMarks,
+        settings: (exam as any).settings,
+        schedule: (exam as any).schedule,
+      },
+      candidate: {
+        name: candidateName,
+        email: candidateEmail,
+      },
+      status: result.status,
+      score: {
+        obtained: result.scoring?.totalScore || 0,
+        total: result.scoring?.totalMarks || 0,
+        percentage: result.scoring?.percentage || 0,
+        passed: result.scoring?.passed || false,
+      },
+      analysis: result.analysis,
+      questionResults: result.questionResults || [],
+      proctoringReport: {
+        totalViolations: violations.length,
+        violationBreakdown: violations.map(v => ({
+          type: v.type,
+          severity: v.severity,
+          detectedAt: v.detectedAt,
+        })),
+        autoSubmitted: session?.status === 'AUTO_SUBMITTED',
+        warningsIssued: session?.warningCount || 0,
+      },
+      ranking: {
+        rank,
+        outOf: allResults.length,
+        percentile: Math.round(percentile * 100) / 100,
+        isShortlisted: false,
+      },
+      session: session ? {
+        startTime: session.startTime,
+        endTime: session.endTime,
+        submittedAt: session.submittedAt,
+        warningCount: session.warningCount,
+        violationsCount: violations.length,
+      } : null,
+      submittedAt: result.submittedAt,
+      publishedAt: result.publishedAt,
+      evaluatedAt: result.evaluatedAt,
+      createdAt: (result as any).createdAt,
     };
   }
 }

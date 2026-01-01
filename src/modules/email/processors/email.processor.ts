@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
 import {
   EmailService,
-  StudentWelcomeEmailData,
+  CandidateWelcomeEmailData,
   OrgAdminWelcomeEmailData,
   ResultNotificationEmailData,
   ExamReminderEmailData,
@@ -18,14 +18,14 @@ export class EmailProcessor {
 
   constructor(private readonly emailService: EmailService) {}
 
-  @Process('student-welcome')
-  async handleStudentWelcomeEmail(job: Job<StudentWelcomeEmailData>) {
+  @Process('candidate-welcome')
+  async handleCandidateWelcomeEmail(job: Job<CandidateWelcomeEmailData>) {
     this.logger.log(
-      `Processing student welcome email job ${job.id} for ${job.data.email}`,
+      `Processing candidate welcome email job ${job.id} for ${job.data.email}`,
     );
 
     try {
-      await this.emailService.sendStudentWelcomeEmail(job.data);
+      await this.emailService.sendCandidateWelcomeEmail(job.data);
       this.logger.log(
         `Successfully sent welcome email to ${job.data.email} (Job ${job.id})`,
       );
@@ -63,18 +63,18 @@ export class EmailProcessor {
   @Process('result-notification')
   async handleResultNotificationEmail(job: Job<ResultNotificationEmailData>) {
     this.logger.log(
-      `Processing result notification email job ${job.id} for ${job.data.studentEmail}`,
+      `Processing result notification email job ${job.id} for ${job.data.candidateEmail}`,
     );
 
     try {
       await this.emailService.sendResultNotificationEmail(job.data);
       this.logger.log(
-        `Successfully sent result notification to ${job.data.studentEmail} (Job ${job.id})`,
+        `Successfully sent result notification to ${job.data.candidateEmail} (Job ${job.id})`,
       );
-      return { success: true, email: job.data.studentEmail };
+      return { success: true, email: job.data.candidateEmail };
     } catch (error) {
       this.logger.error(
-        `Failed to send result notification to ${job.data.studentEmail} (Job ${job.id}):`,
+        `Failed to send result notification to ${job.data.candidateEmail} (Job ${job.id}):`,
         error,
       );
       throw error; // This will trigger retry logic
@@ -84,18 +84,18 @@ export class EmailProcessor {
   @Process('exam-reminder')
   async handleExamReminderEmail(job: Job<ExamReminderEmailData>) {
     this.logger.log(
-      `Processing ${job.data.reminderType} exam reminder email job ${job.id} for ${job.data.studentEmail}`,
+      `Processing ${job.data.reminderType} exam reminder email job ${job.id} for ${job.data.candidateEmail}`,
     );
 
     try {
       await this.emailService.sendExamReminderEmail(job.data);
       this.logger.log(
-        `Successfully sent ${job.data.reminderType} exam reminder to ${job.data.studentEmail} (Job ${job.id})`,
+        `Successfully sent ${job.data.reminderType} exam reminder to ${job.data.candidateEmail} (Job ${job.id})`,
       );
-      return { success: true, email: job.data.studentEmail, reminderType: job.data.reminderType };
+      return { success: true, email: job.data.candidateEmail, reminderType: job.data.reminderType };
     } catch (error) {
       this.logger.error(
-        `Failed to send exam reminder to ${job.data.studentEmail} (Job ${job.id}):`,
+        `Failed to send exam reminder to ${job.data.candidateEmail} (Job ${job.id}):`,
         error,
       );
       throw error; // This will trigger retry logic

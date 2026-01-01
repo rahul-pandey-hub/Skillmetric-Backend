@@ -3,9 +3,11 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { FlexibleAuthGuard } from '../../../common/guards/flexible-auth.guard';
 import { Exam, ExamStatus } from '../schemas/exam.schema';
 import { Question } from '../../questions/schemas/question.schema';
 import { ExamSession, SessionStatus } from '../../proctoring/schemas/exam-session.schema';
+import { Violation } from '../../proctoring/schemas/violation.schema';
 import { Result, ResultStatus } from '../../results/schemas/result.schema';
 import { User } from '../../users/schemas/user.schema';
 
@@ -18,13 +20,14 @@ interface ShuffledQuestion {
   options?: any[];
 }
 
-@ApiTags('student-exams')
-@Controller('student/exams')
+@ApiTags('candidate-exams')
+@Controller('candidate/exams')
 export class StudentExamsController {
   constructor(
     @InjectModel(Exam.name) private examModel: Model<Exam>,
     @InjectModel(Question.name) private questionModel: Model<Question>,
     @InjectModel(ExamSession.name) private examSessionModel: Model<ExamSession>,
+    @InjectModel(Violation.name) private violationModel: Model<Violation>,
     @InjectModel(Result.name) private resultModel: Model<Result>,
     @InjectModel(User.name) private userModel: Model<User>,
   ) {}
@@ -41,7 +44,7 @@ export class StudentExamsController {
 
     // Find exams where student is enrolled
     const enrolledExams = allExams.filter(exam =>
-      exam.enrolledStudents.some(id => id.toString() === studentId)
+      exam.enrolledCandidates.some(id => id.toString() === studentId)
     );
 
     return {
@@ -52,7 +55,7 @@ export class StudentExamsController {
         id: e._id,
         title: e.title,
         code: e.code,
-        enrolledStudents: e.enrolledStudents.map(id => id.toString()),
+        enrolledCandidates: e.enrolledCandidates.map(id => id.toString()),
       })),
     };
   }
@@ -65,23 +68,23 @@ export class StudentExamsController {
   async getStudentExams(@Request() req) {
     const studentId = req.user.id;
 
-    // Find all exams where student is enrolled
+    // Find all exams where candidate is enrolled
     // Convert studentId to ObjectId and use $in operator
     const exams = await this.examModel
       .find({
-        enrolledStudents: { $in: [new Types.ObjectId(studentId)] },
+        enrolledCandidates: { $in: [new Types.ObjectId(studentId)] },
       })
-      .select('title code description duration status schedule proctoringSettings grading settings enrolledStudents')
+      .select('title code description duration status schedule proctoringSettings grading settings enrolledCandidates')
       .sort({ 'schedule.startDate': -1 })
       .exec();
 
-    // For each exam, check if student has already taken it
+    // For each exam, check if candidate has already taken it
     const examsWithStatus = await Promise.all(
       exams.map(async (exam) => {
         const session = await this.examSessionModel
           .findOne({
             examId: exam._id,
-            studentId: new Types.ObjectId(studentId),
+            candidateId: new Types.ObjectId(studentId),
           })
           .sort({ createdAt: -1 })
           .exec();
@@ -134,7 +137,7 @@ export class StudentExamsController {
     }
 
     // Check if student is enrolled
-    const isEnrolled = exam.enrolledStudents.some(
+    const isEnrolled = exam.enrolledCandidates.some(
       (id) => id.toString() === studentId
     );
 
@@ -187,7 +190,7 @@ export class StudentExamsController {
     const previousSession = await this.examSessionModel
       .findOne({
         examId: exam._id,
-        studentId: new Types.ObjectId(studentId),
+        candidateId: new Types.ObjectId(studentId),
       })
       .exec();
 
@@ -310,7 +313,7 @@ export class StudentExamsController {
     // Create exam session
     const session = new this.examSessionModel({
       examId: exam._id,
-      studentId: new Types.ObjectId(studentId),
+      candidateId: new Types.ObjectId(studentId),
       status: SessionStatus.IN_PROGRESS,
       startTime: new Date(),
       endTime: new Date(Date.now() + exam.duration * 60 * 1000),
@@ -338,7 +341,7 @@ export class StudentExamsController {
   }
 
   @Post(':examId/submit')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(FlexibleAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Submit exam answers' })
   @ApiParam({ name: 'examId', description: 'Exam ID' })
@@ -350,29 +353,70 @@ export class StudentExamsController {
   ) {
     const { sessionId, answers } = submitData;
 
+    console.log('\n============ SUBMIT EXAM CALLED ============');
+    console.log('Exam ID:', examId);
+    console.log('Session ID:', sessionId);
+    console.log('User ID:', req.user?.id);
+    console.log('User type:', req.user?.type);
+    console.log('User invitationId:', req.user?.invitationId);
+    console.log('User isGuest:', req.user?.isGuest);
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('Answers count:', answers.length);
+    console.log('Full req.user:', JSON.stringify(req.user, null, 2));
+
     // Find session
     const session = await this.examSessionModel.findById(sessionId).exec();
     if (!session) {
+      console.log('❌ Session not found with ID:', sessionId);
       throw new NotFoundException('Exam session not found');
     }
 
+    console.log('✅ Session found:', {
+      _id: session._id,
+      candidateId: session.candidateId,
+      invitationId: session.invitationId,
+      accessSource: session.accessSource,
+    });
+
     // Verify ownership - check both enrollment and invitation-based access
-    const studentId = req.user?.id;
-    const invitationId = req.user?.invitationId;
+    // Handle both regular users and guest users (invitation-based)
+    const isGuestUser = req.user?.type === 'guest';
+    const studentId = isGuestUser ? null : req.user?.id;
+    const invitationId = isGuestUser ? req.user?.invitationId : req.user?.invitationId;
+
+    console.log('User type:', isGuestUser ? 'GUEST' : 'REGULAR');
+    console.log('Student ID:', studentId);
+    console.log('Invitation ID from user:', invitationId);
 
     let isValidSession = false;
 
-    // Check if it's an enrollment-based session
-    if (session.studentId && studentId && session.studentId.toString() === studentId) {
+    // Check if it's an enrollment-based session (check both new and old field names for backward compatibility)
+    const sessionCandidateId = session.candidateId || (session as any).studentId;
+    console.log('Enrollment check:', {
+      sessionCandidateId: sessionCandidateId?.toString(),
+      studentId,
+      match: sessionCandidateId && studentId && sessionCandidateId.toString() === studentId,
+    });
+
+    if (sessionCandidateId && studentId && sessionCandidateId.toString() === studentId) {
       isValidSession = true;
+      console.log('✅ Valid enrollment-based session');
     }
 
     // Check if it's an invitation-based session
+    console.log('Invitation check:', {
+      sessionInvitationId: session.invitationId?.toString(),
+      userInvitationId: invitationId,
+      match: session.invitationId && invitationId && session.invitationId.toString() === invitationId,
+    });
+
     if (session.invitationId && invitationId && session.invitationId.toString() === invitationId) {
       isValidSession = true;
+      console.log('✅ Valid invitation-based session');
     }
 
     if (!isValidSession) {
+      console.log('❌ INVALID SESSION - Neither enrollment nor invitation match');
       throw new BadRequestException('Invalid session');
     }
 
@@ -399,14 +443,32 @@ export class StudentExamsController {
       let marks = 0;
 
       if (question.type === 'TRUE_FALSE') {
+        console.log('TRUE_FALSE - Selected:', answer.selectedOption, 'Correct:', question.correctAnswer);
         isCorrect = answer.selectedOption === question.correctAnswer;
         marks = isCorrect ? question.marks : (exam.grading.negativeMarking ? -(exam.grading.negativeMarkValue || 0) : 0);
       } else if (question.type === 'MULTIPLE_CHOICE' || question.type === 'MULTIPLE_RESPONSE') {
-        // Handle both single and multiple correct answers
-        const correctAnswers = Array.isArray(question.correctAnswer)
-          ? question.correctAnswer
-          : [question.correctAnswer];
-        const selectedAnswers = answer.selectedOptions || [];
+        // Get selected answers - handle both singular and plural
+        let selectedAnswers = answer.selectedOptions || [];
+        if (!selectedAnswers.length && answer.selectedOption !== undefined) {
+          selectedAnswers = [answer.selectedOption];
+        }
+
+        // Find correct answers from options marked as isCorrect
+        const correctOptions = question.options?.filter(opt => opt.isCorrect) || [];
+        const correctAnswers = correctOptions.map(opt => opt.id);
+
+        // Fallback: if no options marked correct, use correctAnswer field
+        if (correctAnswers.length === 0) {
+          const fallbackAnswers = Array.isArray(question.correctAnswer)
+            ? question.correctAnswer
+            : [question.correctAnswer];
+          correctAnswers.push(...fallbackAnswers);
+        }
+
+        console.log(`${question.type} - Question:`, question.text.substring(0, 50));
+        console.log('Selected answers:', selectedAnswers);
+        console.log('Correct option IDs:', correctAnswers);
+        console.log('Match:', correctAnswers.length === selectedAnswers.length && correctAnswers.every((ans) => selectedAnswers.includes(ans)));
 
         isCorrect =
           correctAnswers.length === selectedAnswers.length &&
@@ -438,9 +500,103 @@ export class StudentExamsController {
     session.score = totalScore;
     await session.save();
 
+    console.log('==================== GRADING INFO ====================');
+    console.log('Exam ID:', exam._id);
+    console.log('Session ID:', session._id);
+    console.log('Candidate ID:', sessionCandidateId);
+    console.log('Invitation ID:', session.invitationId?.toString());
+    console.log('Access Source:', session.accessSource);
+    console.log('Total Score:', totalScore, '/', exam.grading.totalMarks);
+    console.log('Correct answers:', gradedAnswers.filter(a => a.isCorrect).length, '/', answers.length);
+
+    // Determine if this is an invitation-based exam
+    const isInvitationBased = session.accessSource === 'INVITATION' && session.invitationId;
+
+    // Check for existing results BEFORE creating
+    let existingResults;
+    if (isInvitationBased) {
+      existingResults = await this.resultModel.find({
+        exam: exam._id,
+        invitationId: session.invitationId
+      }).exec();
+    } else {
+      existingResults = await this.resultModel.find({
+        exam: exam._id,
+        candidate: sessionCandidateId
+      }).exec();
+    }
+
+    console.log('Existing results count BEFORE creation:', existingResults.length);
+
+    let createdResult = null;
+
+    if (existingResults.length > 0) {
+      console.log('⚠️ WARNING: Results already exist! IDs:', existingResults.map(r => r._id));
+      console.log('⚠️ SKIPPING result creation to prevent duplicates');
+      createdResult = existingResults[0]; // Use existing result
+    } else {
+      // Create result for both enrollment-based and invitation-based exams
+      try {
+        const passed = totalScore >= exam.grading.passingMarks;
+        const percentage = (totalScore / exam.grading.totalMarks) * 100;
+        const attemptNumber = 1;
+
+        const resultData: any = {
+          exam: exam._id,
+          session: session._id,
+          attemptNumber,
+          status: ResultStatus.GRADED,
+          scoring: {
+            totalScore: totalScore,
+            totalMarks: exam.grading.totalMarks,
+            percentage,
+            passed,
+            correctAnswers: gradedAnswers.filter(a => a.isCorrect).length,
+            incorrectAnswers: gradedAnswers.filter(a => !a.isCorrect).length,
+            unanswered: questions.length - answers.length,
+            negativeMarks: 0,
+          },
+          analysis: {
+            timeSpent: Math.floor((new Date().getTime() - new Date(session.startTime).getTime()) / 1000),
+            attempted: answers.length,
+            correct: gradedAnswers.filter(a => a.isCorrect).length,
+            incorrect: gradedAnswers.filter(a => !a.isCorrect).length,
+            unanswered: questions.length - answers.length,
+            accuracy: answers.length > 0 ? (gradedAnswers.filter(a => a.isCorrect).length / answers.length) * 100 : 0,
+          },
+          submittedAt: new Date(),
+          visibleToCandidate: true,
+        };
+
+        // Add fields specific to invitation-based exams
+        if (isInvitationBased) {
+          resultData.invitationId = session.invitationId;
+          resultData.guestCandidateInfo = session.guestCandidateInfo;
+          resultData.isRecruitmentExam = true;
+          resultData.candidate = null; // No candidate ID for invitation-based
+          console.log('📧 Creating result for invitation-based exam:', {
+            email: session.guestCandidateInfo?.email,
+            name: session.guestCandidateInfo?.name,
+          });
+        } else {
+          // Enrollment-based exam
+          resultData.candidate = sessionCandidateId;
+          resultData.isRecruitmentExam = false;
+          console.log('👤 Creating result for enrollment-based exam, candidate:', sessionCandidateId);
+        }
+
+        createdResult = await this.resultModel.create(resultData);
+        console.log('✅ Result created with ID:', createdResult._id);
+      } catch (error) {
+        console.error('❌ Failed to create result:', error.message);
+        console.error(error.stack);
+      }
+    }
+    console.log('======================================================');
+
     // Handle invitation-based access
     if (session.accessSource === 'INVITATION' && session.invitationId) {
-      // Update invitation status to COMPLETED
+      // Update invitation status to COMPLETED and link the result
       const InvitationModel = this.examSessionModel.db.model('ExamInvitation');
       const invitation = await InvitationModel.findById(session.invitationId);
 
@@ -448,6 +604,13 @@ export class StudentExamsController {
         const autoExpire = exam.invitationSettings?.autoExpireOnSubmit || false;
         invitation.status = autoExpire ? 'EXPIRED' : 'COMPLETED';
         invitation.examCompletedAt = new Date();
+
+        // Store the resultId reference in the invitation
+        if (createdResult) {
+          invitation.resultId = createdResult._id;
+          console.log('✅ Linked result to invitation:', createdResult._id);
+        }
+
         await invitation.save();
       }
 
@@ -490,7 +653,7 @@ export class StudentExamsController {
   }
 
   @Post(':sessionId/save-answer')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(FlexibleAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Save answer for a question' })
   @ApiResponse({ status: 200, description: 'Answer saved successfully' })
@@ -499,7 +662,6 @@ export class StudentExamsController {
     @Body() answerData: { questionId: string; answer: any },
     @Request() req,
   ) {
-    const studentId = req.user.id;
     const { questionId, answer } = answerData;
 
     const session = await this.examSessionModel.findById(sessionId).exec();
@@ -507,8 +669,24 @@ export class StudentExamsController {
       throw new NotFoundException('Session not found');
     }
 
-    // Only validate studentId for enrollment-based exams (not invitation-based)
-    if (session.studentId && session.studentId.toString() !== studentId) {
+    // Verify ownership - check both enrollment and invitation-based access
+    const isGuestUser = req.user?.type === 'guest';
+    const studentId = isGuestUser ? null : req.user?.id;
+    const invitationId = isGuestUser ? req.user?.invitationId : req.user?.invitationId;
+
+    let isValidSession = false;
+
+    // Check enrollment-based session
+    if (session.candidateId && studentId && session.candidateId.toString() === studentId) {
+      isValidSession = true;
+    }
+
+    // Check invitation-based session
+    if (session.invitationId && invitationId && session.invitationId.toString() === invitationId) {
+      isValidSession = true;
+    }
+
+    if (!isValidSession) {
       throw new BadRequestException('Invalid session');
     }
 
@@ -548,7 +726,7 @@ export class StudentExamsController {
     const studentId = req.user.id;
 
     const results = await this.resultModel
-      .find({ student: new Types.ObjectId(studentId) })
+      .find({ candidate: new Types.ObjectId(studentId) })
       .populate('exam', 'title code description grading.totalMarks grading.passingMarks schedule')
       .sort({ createdAt: -1 })
       .exec();
@@ -569,7 +747,12 @@ export class StudentExamsController {
           schedule: (result.exam as any).schedule,
         },
         status: result.status,
-        score: result.score,
+        score: {
+          obtained: result.scoring?.totalScore || 0,
+          total: result.scoring?.totalMarks || 0,
+          percentage: result.scoring?.percentage || 0,
+          passed: result.scoring?.passed || false,
+        },
         analysis: result.analysis,
         rank: result.rank,
         percentile: result.percentile,
@@ -629,7 +812,7 @@ export class StudentExamsController {
     const result = await this.resultModel
       .findOne({
         exam: new Types.ObjectId(examId),
-        student: new Types.ObjectId(studentId)
+        candidate: new Types.ObjectId(studentId)
       })
       .populate('exam', 'title code description duration grading settings schedule')
       .exec();
@@ -642,10 +825,33 @@ export class StudentExamsController {
     const session = await this.examSessionModel
       .findOne({
         examId: new Types.ObjectId(examId),
-        studentId: new Types.ObjectId(studentId)
+        candidateId: new Types.ObjectId(studentId)
       })
       .sort({ createdAt: -1 })
       .exec();
+
+    // Fetch violations for proctoring report
+    let proctoringReport = result.proctoringReport;
+    if (session && session.violations && Array.isArray(session.violations)) {
+      proctoringReport = {
+        totalViolations: session.violations.length,
+        violationBreakdown: session.violations.map((v: any) => ({
+          type: v.type,
+          severity: 'MEDIUM', // Default severity
+          detectedAt: v.timestamp,
+          warningIssued: true,
+        })),
+        autoSubmitted: session.status === 'AUTO_SUBMITTED',
+        warningsIssued: session.warningCount || 0,
+      };
+    } else if (session) {
+      proctoringReport = {
+        totalViolations: 0,
+        violationBreakdown: [],
+        autoSubmitted: session.status === 'AUTO_SUBMITTED',
+        warningsIssued: session.warningCount || 0,
+      };
+    }
 
     // Get all results for this exam to calculate ranking
     const allResults = await this.resultModel
@@ -653,14 +859,14 @@ export class StudentExamsController {
         exam: new Types.ObjectId(examId),
         status: { $in: [ResultStatus.GRADED, ResultStatus.PUBLISHED] }
       })
-      .sort({ 'score.obtained': -1 })
+      .sort({ 'scoring.totalScore': -1 })
       .exec();
 
     const totalStudents = allResults.length;
-    const studentRank = allResults.findIndex(r => r.student.toString() === studentId) + 1;
+    const studentRank = allResults.findIndex(r => r.candidate && r.candidate.toString() === studentId) + 1;
     const percentile = totalStudents > 1 ? ((totalStudents - studentRank + 1) / totalStudents) * 100 : 100;
 
-    // Check if student is in top percentage for shortlisting
+    // Check if candidate is in top percentage for shortlisting
     const topPercentage = 15; // Top 15%
     const isShortlisted = (percentile >= (100 - topPercentage));
 
@@ -678,10 +884,15 @@ export class StudentExamsController {
         schedule: (result.exam as any).schedule,
       },
       status: result.status,
-      score: result.score,
+      score: {
+        obtained: result.scoring?.totalScore || 0,
+        total: result.scoring?.totalMarks || 0,
+        percentage: result.scoring?.percentage || 0,
+        passed: result.scoring?.passed || false,
+      },
       analysis: result.analysis,
       questionResults: result.questionResults,
-      proctoringReport: result.proctoringReport,
+      proctoringReport: proctoringReport,
       ranking: {
         rank: studentRank,
         outOf: totalStudents,

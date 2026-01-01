@@ -21,7 +21,7 @@ export class ProctoringService {
   async getExamSessions(examId: string) {
     return this.sessionModel
       .find({ examId: examId })
-      .populate('studentId', 'name email studentId')
+      .populate('candidateId', 'name email')
       .sort({ startTime: -1 })
       .exec();
   }
@@ -29,7 +29,7 @@ export class ProctoringService {
   async getSessionDetails(sessionId: string) {
     return this.sessionModel
       .findById(sessionId)
-      .populate('studentId', 'name email studentId')
+      .populate('candidateId', 'name email')
       .populate('examId', 'title code')
       .populate('violations')
       .exec();
